@@ -281,14 +281,17 @@ static av_cold duk_context *get_duk_context(AVFilterContext *ctx, GEQJSContext *
         }
     } else {
         int length = strlen(arg);
-        char function_body[length+37];
+        char *function_body=(char*) malloc(sizeof(char)*(length+37));
         snprintf(function_body, length+37, "function ev(X,Y,W,H,N,SW,SH,T) { %s }", arg);
         av_log(ctx, AV_LOG_DEBUG, "compiling %s for plane %d\n", function_body ,plane);
-        if(compileJS(ctx, duk_ctx, function_body)==0) {
+        int result = compileJS(ctx, duk_ctx, function_body);
+        free(function_body);
+        if(result==0) {
             return duk_ctx; 
         } else {
             return NULL;
         }
+
     }
 }
 
