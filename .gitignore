@@ -21,6 +21,9 @@
 *.version
 *.ptx
 *.ptx.c
+*.mov
+*.mp4
+*.png
 *_g
 \#*
 .\#*
@@ -36,3 +39,4 @@
 /lcov/
 /src
 /mapfile
+/priv

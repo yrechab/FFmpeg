@@ -35,7 +35,7 @@
 
 typedef struct Func {
     const char *name;
-    uint8_t (*f)(int x, int y, int w, int h, int n, double p1, double p2, double p3);
+    uint8_t (*f)(int x, int y, int w, int h, int n, double *p);
 } Func;
 
 static double complex poly0(double complex z) {
@@ -59,6 +59,10 @@ static double complex poly4(double complex z) {
     return 5 * (z - 2*I) * (z - 1+1*I) * (z - 1+1*I) / (z + 3-2*I) * (z + 3-2*I) * (z + 3-2*I);
 }
 
+static double complex poly5(double complex z) {
+    return 1/((z * z) * (z * z) * (z * z) *z - z);
+}
+
 static double complex id(double complex z) {
     return z;
 }
@@ -67,41 +71,53 @@ static double complex expinv(double complex z) {
     return cexp(1/z);
 }
 
+static double complex sininv(double complex z) {
+    return csin(1/z);
+}
+
+static double complex sinz(double complex z) {
+    return csin(z);
+}
+
+static double complex tanz(double complex z) {
+    return ctan(z);
+}
+
 /* ============================= FUNCS ===========================================*/
 
-static uint8_t zero(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
+static uint8_t zero(int x, int y, int w, int h, int n, double *p) {
     return 0;
 }
 
-static uint8_t poly1re(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = (double)n/((double)w*(p1==0?1:p1));
+static uint8_t poly1re(int x, int y, int w, int h, int n, double *p) {
+    double f = (double)n/((double)w*(p[0]==0?1:p[0]));
     double complex z = x*f + (y*f) * I;
     return 128 + creal(poly1(z));
 }
-static uint8_t poly1img(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = (double)n/((double)w*(p1==0?1:p1));
+static uint8_t poly1img(int x, int y, int w, int h, int n, double *p) {
+    double f = (double)n/((double)w*(p[0]==0?1:p[0]));
     double complex z = x*f + (y*f) * I;
     return 128 + cimag(poly1(z));
 }
-static uint8_t poly1abs(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = (double)n/((double)w*(p1==0?1:p1));
+static uint8_t poly1abs(int x, int y, int w, int h, int n, double *p) {
+    double f = (double)n/((double)w*(p[0]==0?1:p[0]));
     double complex z = x*f + (y*f) * I;
     return cabs(poly1(z));
 }
 
-static uint8_t idre(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = (double)n/((double)w*(p1==0?1:p1));
+static uint8_t idre(int x, int y, int w, int h, int n, double *p) {
+    double f = (double)n/((double)w*(p[0]==0?1:p[0]));
     double complex z = x*f + (y*f) * I;
     return 128 + creal(id(z));
 }
-static uint8_t idimg(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = (double)n/((double)w*(p1==0?1:p1));
+static uint8_t idimg(int x, int y, int w, int h, int n, double *p) {
+    double f = (double)n/((double)w*(p[0]==0?1:p[0]));
     double complex z = x*f + (y*f) * I;
     return 128 + cimag(id(z));
 }
 
-static uint8_t idabs(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = (double)n/((double)w*(p1==0?1:p1));
+static uint8_t idabs(int x, int y, int w, int h, int n, double *p) {
+    double f = (double)n/((double)w*(p[0]==0?1:p[0]));
     double complex z = x*f + (y*f) * I;
     return cabs(id(z));
 }
@@ -163,133 +179,157 @@ static uint8_t hsv_b(double phi, double S, double V) {
     return retval;
 }
 
-static uint8_t polyg(double complex (*poly)(double complex z),int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly(x*f + (y*f) * I);
-    return ((double)n+ 1) * p3 * cabs(z) * hsv_g(carg(z), p2, 1);
+static uint8_t funcg(double complex (*func)(double complex z),int x, int y, int w, int h, int n, double *p) {
+    double f = (p[0]+p[5]*n)/(double)w;
+    double complex z = func(x*f + (y*f) * I);
+    return ((double)n + 1 + p[3] * pow(n,p[4])) * p[2] * cabs(z) * hsv_g(carg(z), p[1], 1);
 }
 
-static uint8_t polyb(double complex (*poly)(double complex z),int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly(x*f + (y*f) * I);
-    return ((double)n + 1 ) * p3 * cabs(z) * hsv_b(carg(z), p2, 1);
+static uint8_t funcb(double complex (*func)(double complex z),int x, int y, int w, int h, int n, double *p) {
+    double f = (p[0]+p[5]*n)/(double)w;
+    double complex z = func(x*f + (y*f) * I);
+    return ((double)n + 1 + p[3] * pow(n,p[4])) * p[2] * cabs(z) * hsv_b(carg(z), p[1], 1);
 }
 
-static uint8_t polyr(double complex (*poly)(double complex z),int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly(x*f + (y*f) * I);
-    return ((double)n + 1) * p3 * cabs(z) * hsv_r(carg(z), p2, 1);
+static uint8_t funcr(double complex (*func)(double complex z),int x, int y, int w, int h, int n, double *p) {
+    double f = (p[0]+p[5]*n)/(double)w;
+    double complex z = func(x*f + (y*f) * I);
+    return ((double)n + 1 + p[3] * pow(n,p[4])) * p[2] * cabs(z) * hsv_r(carg(z), p[1], 1);
 }
 
-static uint8_t expinvg(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    return polyg(expinv,x,y,w,h,n,p1,p2,p3);
+static uint8_t tang(int x, int y, int w, int h, int n, double *p) {
+    return funcg(tanz,x,y,w,h,n,p);
 }
 
-static uint8_t expinvb(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    return polyb(expinv,x,y,w,h,n,p1,p2,p3);
+static uint8_t tanb(int x, int y, int w, int h, int n, double *p) {
+    return funcb(tanz,x,y,w,h,n,p);
 }
 
-static uint8_t expinvr(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    return polyr(expinv,x,y,w,h,n,p1,p2,p3);
+static uint8_t tanr(int x, int y, int w, int h, int n, double *p) {
+    return funcr(tanz,x,y,w,h,n,p);
 }
 
-static uint8_t poly4g(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    return polyg(poly4,x,y,w,h,n,p1,p2,p3);
+static uint8_t sing(int x, int y, int w, int h, int n, double *p) {
+    return funcg(sinz,x,y,w,h,n,p);
 }
 
-static uint8_t poly4b(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    return polyb(poly4,x,y,w,h,n,p1,p2,p3);
+static uint8_t sinb(int x, int y, int w, int h, int n, double *p) {
+    return funcb(sinz,x,y,w,h,n,p);
 }
 
-static uint8_t poly4r(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    return polyr(poly4,x,y,w,h,n,p1,p2,p3);
+static uint8_t sinr(int x, int y, int w, int h, int n, double *p) {
+    return funcr(sinz,x,y,w,h,n,p);
 }
 
-static uint8_t poly3g(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly3(x*f + (y*f) * I);
-    return ((double)n+ 1 + 0.001*n*n) * p3 * cabs(z) * hsv_g(carg(z), p2, 1);
+static uint8_t sininvg(int x, int y, int w, int h, int n, double *p) {
+    return funcg(sininv,x,y,w,h,n,p);
 }
 
-static uint8_t poly3b(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly3(x*f + (y*f) * I);
-    return ((double)n + 1 + 0.001*n*n) * p3 * cabs(z) * hsv_b(carg(z), p2, 1);
+static uint8_t sininvb(int x, int y, int w, int h, int n, double *p) {
+    return funcb(sininv,x,y,w,h,n,p);
 }
 
-static uint8_t poly3r(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly3(x*f + (y*f) * I);
-    return ((double)n + 1 + 0.001*n*n) * p3 * cabs(z) * hsv_r(carg(z), p2, 1);
+static uint8_t sininvr(int x, int y, int w, int h, int n, double *p) {
+    return funcr(sininv,x,y,w,h,n,p);
 }
 
-static uint8_t poly2g(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly2(x*f + (y*f) * I);
-    return ((double)n+1) * p3 * cabs(z) * hsv_g(carg(z), p2, 1);
+static uint8_t expinvg(int x, int y, int w, int h, int n, double *p) {
+    return funcg(expinv,x,y,w,h,n,p);
 }
 
-static uint8_t poly2b(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly2(x*f + (y*f) * I);
-    return ((double)n+1) * p3 * cabs(z) * hsv_b(carg(z), p2, 1);
+static uint8_t expinvb(int x, int y, int w, int h, int n, double *p) {
+    return funcb(expinv,x,y,w,h,n,p);
 }
 
-static uint8_t poly2r(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly2(x*f + (y*f) * I);
-    return ((double)n+1) * p3 * cabs(z) * hsv_r(carg(z), p2, 1);
+static uint8_t expinvr(int x, int y, int w, int h, int n, double *p) {
+    return funcr(expinv,x,y,w,h,n,p);
 }
 
-static uint8_t poly1g(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly1(x*f + (y*f) * I);
-    return ((double)n+1) * p3 * cabs(z) * hsv_g(carg(z), p2, 1);
+static uint8_t poly5g(int x, int y, int w, int h, int n, double *p) {
+    return funcg(poly5,x,y,w,h,n,p);
 }
 
-static uint8_t poly1b(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly1(x*f + (y*f) * I);
-    return ((double)n+1) * p3 * cabs(z) * hsv_b(carg(z), p2, 1);
+static uint8_t poly5b(int x, int y, int w, int h, int n, double *p) {
+    return funcb(poly5,x,y,w,h,n,p);
 }
 
-static uint8_t poly1r(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly1(x*f + (y*f) * I);
-    return ((double)n+1) * p3 * cabs(z) * hsv_r(carg(z), p2, 1);
+static uint8_t poly5r(int x, int y, int w, int h, int n, double *p) {
+    return funcr(poly5,x,y,w,h,n,p);
 }
 
-static uint8_t idrgbg(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
+static uint8_t poly4g(int x, int y, int w, int h, int n, double *p) {
+    return funcg(poly4,x,y,w,h,n,p);
+}
+
+static uint8_t poly4b(int x, int y, int w, int h, int n, double *p) {
+    return funcb(poly4,x,y,w,h,n,p);
+}
+
+static uint8_t poly4r(int x, int y, int w, int h, int n, double *p) {
+    return funcr(poly4,x,y,w,h,n,p);
+}
+
+static uint8_t poly3g(int x, int y, int w, int h, int n, double *p) {
+    return funcg(poly3,x,y,w,h,n,p);
+}
+
+static uint8_t poly3b(int x, int y, int w, int h, int n, double *p) {
+    return funcb(poly3,x,y,w,h,n,p);
+}
+
+static uint8_t poly3r(int x, int y, int w, int h, int n, double *p) {
+    return funcr(poly3,x,y,w,h,n,p);
+}
+
+static uint8_t poly2g(int x, int y, int w, int h, int n, double *p) {
+    return funcg(poly2,x,y,w,h,n,p);
+}
+
+static uint8_t poly2b(int x, int y, int w, int h, int n, double *p) {
+    return funcb(poly2,x,y,w,h,n,p);
+}
+
+static uint8_t poly2r(int x, int y, int w, int h, int n, double *p) {
+    return funcr(poly2,x,y,w,h,n,p);
+}
+
+static uint8_t poly1g(int x, int y, int w, int h, int n, double *p) {
+    return funcg(poly1,x,y,w,h,n,p);
+}
+
+static uint8_t poly1b(int x, int y, int w, int h, int n, double *p) {
+    return funcb(poly1,x,y,w,h,n,p);
+}
+
+static uint8_t poly1r(int x, int y, int w, int h, int n, double *p) {
+    return funcr(poly1,x,y,w,h,n,p);
+}
+
+static uint8_t idrgbg(int x, int y, int w, int h, int n, double *p) {
     double complex z = x + y * I;
     return hsv_g(carg(z),1, cabs(z)/(h/2));
 }
 
-static uint8_t idrgbb(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
+static uint8_t idrgbb(int x, int y, int w, int h, int n, double *p) {
     double complex z = x + y * I;
     return hsv_b(carg(z),1, cabs(z)/(h/2));
 }
 
-static uint8_t idrgbr(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
+static uint8_t idrgbr(int x, int y, int w, int h, int n, double *p) {
     double complex z = x + y * I;
     return hsv_r(carg(z),1, cabs(z)/(h/2));
 }
 
-static uint8_t sqg(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly0(x*f + (y*f) * I);
-    return ((double)n+1) * p3 * cabs(z) * hsv_g(carg(z), p2, 1);
+static uint8_t sqg(int x, int y, int w, int h, int n, double *p) {
+    return funcg(poly0,x,y,w,h,n,p);
 }
 
-static uint8_t sqb(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly0(x*f + (y*f) * I);
-    return ((double)n+1) * p3 * cabs(z) * hsv_b(carg(z), p2, 1);
+static uint8_t sqb(int x, int y, int w, int h, int n, double *p) {
+    return funcb(poly0,x,y,w,h,n,p);
 }
 
-static uint8_t sqr(int x, int y, int w, int h, int n, double p1, double p2, double p3) {
-    double f = p1/(double)w;
-    double complex z = poly0(x*f + (y*f) * I);
-    return ((double)n+1) * p3 * cabs(z) * hsv_r(carg(z), p2, 1);
+static uint8_t sqr(int x, int y, int w, int h, int n, double *p) {
+    return funcr(poly0,x,y,w,h,n,p);
 }
 
 
@@ -301,6 +341,9 @@ static Func funcs[] = {
     { "poly1re", poly1re },
     { "poly1img", poly1img },
     { "poly1abs", poly1abs },
+    { "poly5r", poly5r },
+    { "poly5g", poly5g },
+    { "poly5b", poly5b },
     { "poly4r", poly4r },
     { "poly4g", poly4g },
     { "poly4b", poly4b },
@@ -316,6 +359,15 @@ static Func funcs[] = {
     { "expinvr", expinvr },
     { "expinvg", expinvg },
     { "expinvb", expinvb },
+    { "sininvr", sininvr },
+    { "sininvg", sininvg },
+    { "sininvb", sininvb },
+    { "tanr", tanr },
+    { "tang", tang },
+    { "tanb", tanb },
+    { "sinr", sinr },
+    { "sing", sing },
+    { "sinb", sinb },
     { "idrgbr", idrgbr },
     { "idrgbg", idrgbg },
     { "idrgbb", idrgbb },
@@ -325,7 +377,7 @@ static Func funcs[] = {
     {NULL, NULL},
 };
 
-static uint8_t (*getFunc(const char *name))(int,int,int,int,int,double,double,double) {
+static uint8_t (*getFunc(const char *name))(int,int,int,int,int,double*) {
     int k=0;
     while(funcs[k++].name) {
         if(!strcmp(name, funcs[k].name)) {
@@ -336,21 +388,19 @@ static uint8_t (*getFunc(const char *name))(int,int,int,int,int,double,double,do
 }
 /* ================================== FILTER ========================================== */
 
+#define PARAMSIZE 6
+
 typedef struct CGenContext {
     const AVClass *class;
     const char *f1;
-    double p11;
-    double p12;
-    double p13;
+    double p1[PARAMSIZE];
     const char *f2;
-    double p21;
-    double p22;
-    double p23;
+    double p2[PARAMSIZE];
+    int cp2; // copy params from 0=none, 1=p1, 3=p3
     const char *f3;
-    double p31;
-    double p32;
-    double p33;
-    uint8_t (*funcs[3])(int,int,int,int,int,double,double,double);
+    double p3[PARAMSIZE];
+    int cp3; // copy params from 0=none, 1=p1, 2=p2
+    uint8_t (*funcs[3])(int,int,int,int,int,double*);
     int hsub, vsub;             ///< chroma subsampling
     int planes;                 ///< number of planes
     int is_rgb;
@@ -363,17 +413,28 @@ typedef struct CGenContext {
 
 static const AVOption cgen_options[] = {
     { "f1",  "f1",   OFFSET(f1),  AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "p11","p11",   OFFSET(p11), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p12","p12",   OFFSET(p12), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p13","p13",   OFFSET(p13), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "f2",  "f2",   OFFSET(f2),  AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "p21","p21",   OFFSET(p21), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p22","p22",   OFFSET(p22), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p23","p23",   OFFSET(p23), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p11","p11",   OFFSET(p1[0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p12","p12",   OFFSET(p1[1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p13","p13",   OFFSET(p1[2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p14","p14",   OFFSET(p1[3]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p15","p15",   OFFSET(p1[4]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p16","p16",   OFFSET(p1[5]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "f2",  "f2",   OFFSET(f2),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "cp2","cp2",   OFFSET(cp2),   AV_OPT_TYPE_INT,    {.i64=0},    0,        3,        FLAGS },
+    { "p21","p21",   OFFSET(p2[0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p22","p22",   OFFSET(p2[1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p23","p23",   OFFSET(p2[2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p24","p24",   OFFSET(p2[3]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p25","p25",   OFFSET(p2[4]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p26","p26",   OFFSET(p2[5]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "f3",  "f3",   OFFSET(f3),  AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "p31","p31",   OFFSET(p31), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p32","p32",   OFFSET(p32), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p33","p33",   OFFSET(p33), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "cp3","cp3",   OFFSET(cp3),   AV_OPT_TYPE_INT,    {.i64=0},    0,        2,        FLAGS },
+    { "p31","p31",   OFFSET(p3[0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p32","p32",   OFFSET(p3[1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p33","p33",   OFFSET(p3[2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p34","p34",   OFFSET(p3[3]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p35","p35",   OFFSET(p3[4]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p36","p36",   OFFSET(p3[5]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "rgb","rgb",OFFSET(is_rgb), AV_OPT_TYPE_INT,    {.i64=0},    0,        1,        FLAGS },
     {NULL},
 };
@@ -389,7 +450,7 @@ static av_cold int cgen_init(AVFilterContext *ctx)
             av_log(ctx, AV_LOG_WARNING, "function for f1 not found %s\n", cgen->f1);
             cgen->funcs[0] = zero;
         } else {
-            av_log(ctx, AV_LOG_INFO, "function for f1 is %s %f %f %f\n", cgen->f1, cgen->p11, cgen->p12, cgen->p13);
+            av_log(ctx, AV_LOG_INFO, "function for f1 is %s %f %f %f %f %f %f\n", cgen->f1, cgen->p1[0], cgen->p1[1], cgen->p1[2], cgen->p1[3], cgen->p1[4], cgen->p1[5]);
         }
     } else {
         av_log(ctx, AV_LOG_WARNING, "no function given for f1\n");
@@ -402,7 +463,12 @@ static av_cold int cgen_init(AVFilterContext *ctx)
             av_log(ctx, AV_LOG_WARNING, "function not found %s\n", cgen->f2);
             cgen->funcs[1] = zero;
         } else {
-            av_log(ctx, AV_LOG_INFO, "function for f2 is %s %f %f %f\n", cgen->f2, cgen->p21, cgen->p22, cgen->p23);
+            if(cgen->cp2 == 1) {
+                memcpy(cgen->p2,cgen->p1,sizeof(double)*PARAMSIZE);
+            } else if(cgen->cp2 == 3) {
+                memcpy(cgen->p2,cgen->p3,sizeof(double)*PARAMSIZE);
+            }
+            av_log(ctx, AV_LOG_INFO, "function for f2 is %s %f %f %f %f %f %f\n", cgen->f2, cgen->p2[0], cgen->p2[1], cgen->p2[2], cgen->p2[3], cgen->p2[4], cgen->p2[5]);
         }
     } else {
         av_log(ctx, AV_LOG_WARNING, "no function given for f2\n");
@@ -415,7 +481,12 @@ static av_cold int cgen_init(AVFilterContext *ctx)
             av_log(ctx, AV_LOG_WARNING, "function not found %s\n", cgen->f3);
             cgen->funcs[2] = zero;
         } else {
-            av_log(ctx, AV_LOG_INFO, "function for f3 is %s %f %f %f\n", cgen->f3, cgen->p31, cgen->p32, cgen->p33);
+            if(cgen->cp3 == 1) {
+                memcpy(cgen->p3,cgen->p1,sizeof(double)*PARAMSIZE);
+            } else if(cgen->cp2 == 2) {
+                memcpy(cgen->p3,cgen->p2,sizeof(double)*PARAMSIZE);
+            }
+            av_log(ctx, AV_LOG_INFO, "function for f3 is %s %f %f %f %f %f %f\n", cgen->f3, cgen->p3[0], cgen->p3[1], cgen->p3[2], cgen->p3[3], cgen->p3[4], cgen->p3[5]);
         }
     } else {
         av_log(ctx, AV_LOG_WARNING, "no function given for f3\n");
@@ -506,7 +577,7 @@ static int slice_cgen_filter(AVFilterContext *ctx, void *arg, int jobnr, int nb_
             ptr = td->in->data[plane] + linesize * y;
 
             for (x = 0; x < width; x++) {
-                ptr[x] = cgen->funcs[0](x-width/2,y-height/2,width,height,td->n,cgen->p11,cgen->p12,cgen->p13);
+                ptr[x] = cgen->funcs[0](x-width/2,y-height/2,width,height,td->n,cgen->p1);
             }
         }
     }
@@ -515,7 +586,7 @@ static int slice_cgen_filter(AVFilterContext *ctx, void *arg, int jobnr, int nb_
             ptr = td->in->data[plane] + linesize * y;
 
             for (x = 0; x < width; x++) {
-                ptr[x] = cgen->funcs[1](x-width/2,y-height/2,width,height,td->n,cgen->p21,cgen->p22,cgen->p23);
+                ptr[x] = cgen->funcs[1](x-width/2,y-height/2,width,height,td->n,cgen->p2);
             }
         }
     }
@@ -524,7 +595,7 @@ static int slice_cgen_filter(AVFilterContext *ctx, void *arg, int jobnr, int nb_
             ptr = td->in->data[plane] + linesize * y;
 
             for (x = 0; x < width; x++) {
-                ptr[x] = cgen->funcs[2](x-width/2,y-height/2,width,height,td->n,cgen->p31,cgen->p32,cgen->p33);
+                ptr[x] = cgen->funcs[2](x-width/2,y-height/2,width,height,td->n,cgen->p3);
             }
         }
     }
