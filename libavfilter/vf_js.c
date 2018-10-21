@@ -390,7 +390,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = inlink->dst->outputs[0];
     AVFrame *out;
     const int nb_threads = ff_filter_get_nb_threads(ctx);
-    av_log(ctx, AV_LOG_INFO, "number of threads %d\n", nb_threads);
+    //av_log(ctx, AV_LOG_INFO, "number of threads %d\n", nb_threads);
 
     av_log(ctx, AV_LOG_DEBUG, "filter fraem out: %d %d frameNr=%lld\n", outlink->w, outlink->h, inlink->frame_count_out);
     out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
