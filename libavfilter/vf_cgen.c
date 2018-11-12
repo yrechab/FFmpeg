@@ -266,18 +266,19 @@ static double (*getNFunc(const char *name))(int,double*) {
     return NULL;
 }
 
-uint8_t (*hsv[3])(double phi, double S, double V) = { hsv_g, hsv_b, hsv_r };
+//uint8_t (*hsv[3])(double phi, double S, double V) = { hsv_g, hsv_b, hsv_r };
 
 
 double complex **last;
 
 /* ============================= FUNCS2 =========================================== */
+/*
 static uint8_t ffunc(double complex (*func)(double complex z, double *p, int n), int plane, int x, int y, int w, int h, int n, CGenContext *ctx) {
     double f = ctx->wfunc(n-ctx->offset,ctx->wp)/(double)w;
     double complex z = func((x*f+ctx->p1[4]+ctx->p1[2]*n) + ((y*f+ctx->p1[5]+ctx->p1[3]*n) * I), &ctx->p1[6],n-ctx->offset);
     return ctx->nfunc(n,ctx->np) * ctx->p1[0] * cabs(z) * hsv[plane](carg(z), ctx->p1[1], 1);
 }
-
+*/
 
 static uint8_t ffuncg(double complex (*func)(double complex z, double *p, int n), int x, int y, int w, int h, int n, CGenContext *ctx) {
     double f = ctx->wfunc(n-ctx->offset,ctx->wp)/(double)w;
