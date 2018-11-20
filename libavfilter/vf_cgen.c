@@ -693,6 +693,23 @@ static uint8_t sqr(int x, int y, int w, int h, int n, double *p) {
     return funcr(poly0,x,y,w,h,n,p);
 }
 
+static uint8_t r01g(int x, int y, int w, int h, int n, double *p) {
+    double f = p[0]+(double)n*p[1];
+    if(x==0 || y==0) return p[2];
+    return p[2]+(cos(1/((x*y)*f))+1)/2 * (p[3]-p[2]);
+}
+
+static uint8_t r01b(int x, int y, int w, int h, int n, double *p) {
+    double f = p[0]+(double)n*p[1];
+    if(x==0 || y==0) return p[2];
+    return p[2] + (cos(1/((x*y)*f))+1)/2 * (p[3]-p[2]);
+}
+
+static uint8_t r01r(int x, int y, int w, int h, int n, double *p) {
+    double f = p[0]+(double)n*p[1];
+    if(x==0 || y==0) return p[2];
+    return p[2] + (cos(1/((x*y)*f))+1)/2 * (p[3]-p[2]);
+}
 
 static Func funcs[] = {
     { "zero", zero },
@@ -736,6 +753,9 @@ static Func funcs[] = {
     { "sqr", sqr },
     { "sqg", sqg },
     { "sqb", sqb },
+    { "r01g", r01g },
+    { "r01b", r01b },
+    { "r01r", r01r },
     {NULL, NULL},
 };
 
