@@ -388,12 +388,24 @@ static uint8_t ffunc(double complex (*func)(double complex z, double *p, double 
     return ctx->nfunc(n,ctx->np) * ctx->fac * cabs(z) * hsv[plane](carg(z), ctx->sat, 1);
 }
 
+static uint8_t ffunc2(double complex (*func)(double complex z, double *p, double t), int plane, int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    double f = ctx->wfunc(n-ctx->offset,ctx->wp)/(double)w;
+    double complex _z = rotate((x*f+ctx->x+ctx->xn*n) + ((y*f+ctx->y+ctx->yn*n) * I), ctx->rot, ctx->rotn * n);
+    //double complex z = func((x*f+ctx->x+ctx->xn*n) + ((y*f+ctx->y+ctx->yn*n) * I), ctx->p,(n-ctx->offset)*ctx->div);
+    double complex z = func(_z, ctx->p,(n-ctx->offset)*ctx->div);
+    return (sin(ctx->nfunc(n,ctx->np) * ctx->fac * cabs(z) * hsv[plane](carg(z), ctx->sat, 1))+1)*127;
+}
+
 static uint8_t fexp1(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
     return ffunc(fexp,plane,x,y,w,h,n,ctx);
 }
 
 static uint8_t frat(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
     return ffunc(rat,plane,x,y,w,h,n,ctx);
+}
+
+static uint8_t frats(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    return ffunc2(rat,plane,x,y,w,h,n,ctx);
 }
 
 static uint8_t fid(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
@@ -442,6 +454,7 @@ static Func funcs[] = {
     { "zero", zero },
     { "sqasin", sqasin },
     { "frat", frat },
+    { "frats", frats },
     { "fexp", fexp1 },
     { "fexpr", fexpr },
     { "fsin", fsin },

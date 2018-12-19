@@ -32,6 +32,7 @@ HEADERS = adler32.h                                                     \
           fifo.h                                                        \
           file.h                                                        \
           frame.h                                                       \
+		  genutil.h                                                     \
           hash.h                                                        \
           hmac.h                                                        \
           hwcontext.h                                                   \
@@ -58,6 +59,7 @@ HEADERS = adler32.h                                                     \
           murmur3.h                                                     \
           opt.h                                                         \
           parseutils.h                                                  \
+          plot.h                                                        \
           pixdesc.h                                                     \
           pixelutils.h                                                  \
           pixfmt.h                                                      \
@@ -120,6 +122,7 @@ OBJS = adler32.o                                                        \
        float_dsp.o                                                      \
        fixed_dsp.o                                                      \
        frame.o                                                          \
+       genutil.o                                                        \
        hash.o                                                           \
        hmac.o                                                           \
        hwcontext.o                                                      \
@@ -137,6 +140,7 @@ OBJS = adler32.o                                                        \
        murmur3.o                                                        \
        opt.o                                                            \
        parseutils.o                                                     \
+       plot.o                                                           \
        pixdesc.o                                                        \
        pixelutils.o                                                     \
        random_seed.o                                                    \

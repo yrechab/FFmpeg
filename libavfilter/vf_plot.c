@@ -52,6 +52,7 @@ typedef struct PlotContext {
     double yn;
     double sat;
     double speed;
+    double length;
     int form;
     int count;
     int layers;
@@ -112,8 +113,8 @@ static const AVOption plot_options[] = {
     { "p35","p35",   OFFSET(p[35]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p36","p36",   OFFSET(p[36]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p37","p37",   OFFSET(p[37]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p38","p38",   OFFSET(p[38]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p39","p39",   OFFSET(p[39]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p38","p38",   OFFSET(p[38]), AV_OPT_TYPE_DOUBLE, {.dbl =  1}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "p39","p39",   OFFSET(p[39]), AV_OPT_TYPE_DOUBLE, {.dbl =  1}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "x","x",       OFFSET(x),     AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "y","y",       OFFSET(y),     AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "xn","xn",     OFFSET(xn),    AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -124,6 +125,7 @@ static const AVOption plot_options[] = {
     { "count","c",   OFFSET(count), AV_OPT_TYPE_INT,    {.i64 =  1}, 1,  INT_MAX,  FLAGS },
     { "dim","d",     OFFSET(dim),   AV_OPT_TYPE_INT,    {.i64 =  4}, 1,  255,  FLAGS },
     { "speed","s",   OFFSET(speed), AV_OPT_TYPE_DOUBLE, {.dbl =  0.01}, 0,  DBL_MAX,  FLAGS },
+    { "length","len",OFFSET(length), AV_OPT_TYPE_DOUBLE, {.dbl =  2*M_PI}, 0,  DBL_MAX,  FLAGS },
     { "rot","rot",   OFFSET(rot),   AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "rotn","rotn", OFFSET(rotn),  AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "mf",  "mf",   OFFSET(mf),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
@@ -186,11 +188,6 @@ typedef struct NFunc {
     double (*f)(int n, double *p);
 } NFunc;
 
-typedef struct PFunc {
-    const char *name;
-    double complex (*f)(double t, double *p);
-} PFunc;
-
 #define PFUNC(x) double complex (*x)(double t, double *p)
 
 static double complex rotate(double complex z, double phi) {
@@ -237,21 +234,52 @@ static double complex lissajous(double t, double *p) {
     return p[0] * x + I * p[0] * y;
 }
 
+static double complex lissajousG(double t, double *p) {
+    double a = p[1];
+    double b = p[2];
+    double c = p[3];
+    double d = p[4];
+    double e = p[5];
+    double x = sin(t);
+    double y = sin(a*t+b) + c * sin(d*t+e);
+    return p[0] * x + I * p[0] * y;
+}
 
-static PFunc pfuncs[] = {
-    {"sin",psin},
-    {NULL,NULL}
-};
+static double complex lissajousQ(double t, double *p) {
+    double a = p[1];
+    double b = p[2];
+    double c = p[3];
+    double d = p[4];
+    double x = cos(t) + a * sin(b*t) * sin(b*t);
+    double y = sin(t) + c * sin(d*t) * sin(d*t);
+    return p[0] * x + I * p[0] * y;
+}
 
-static double complex (*getPFunc(const char *name))(double , double*) {
-    int k=0;
-    while(pfuncs[k].name) {
-        if(!strcmp(name, pfuncs[k].name)) {
-            return pfuncs[k].f;
-        }
-        k++;
-    }
-    return NULL;
+
+static double poly3(double a,double b,double x) {
+    return a*x*x*x + b*x;
+}
+
+static double complex legendre(double t, double *p) {
+    double x = p[0] * poly3(p[1],p[2],cos(t));
+    double y = p[0] * poly3(p[1],p[2],sin(t));
+    return x + I * y;
+}
+
+static double complex hypocycloid(double t, double *p) {
+    double a = p[1];
+    double b = p[2];
+    double x = p[0]*((1-a)*cos(a*t)+a*b*cos((1-a)*t));
+    double y = p[0]*((1-a)*sin(a*t)-a*b*sin((1-a)*t));
+    return x + I * y;
+}
+
+static double complex cb(double t, double *p) {
+    double a = p[2];
+    double b = p[3];
+    double x = p[0]*sin(a*t)*cos(t);
+    double y = p[1]*sin(b*t)*sin(t);
+    return x + I * y;
 }
 
 /* ============================= NFUNCS *******************************************/
@@ -271,6 +299,16 @@ static double idn(int n, double *p) {
 
 static double constant(int n, double *p) {
     return p[0]?p[0]:1;
+}
+
+static double sqn(int n, double *p) {
+    double x = (double)n/p[0];
+    return p[1] * (sqrt(x+0.25)-0.5);
+}
+
+static double ln(int n, double *p) {
+    double x = (double)n/p[0];
+    return p[1] * log(x+1);
 }
 
 static double lin(int n, double *p) {
@@ -306,6 +344,8 @@ static NFunc nfuncs[] = {
     {"sin",nsin},
     {"inv",inv},
     {"gauss",gauss},
+    {"sq",sqn},
+    {"ln",ln},
     {NULL,NULL}
 };
 
@@ -322,19 +362,174 @@ static double (*getNFunc(const char *name))(int,double*) {
 
 
 /* ================================= PLOTTER ================================================ */
-
 static void plotPix(int x, int y, double a, int w, int h,int linesize, uint8_t *buf) {
     if(x>=0 && x<w && y>=0 && y<h) {
         buf[x + linesize * y] = floor(a*255);
     }
 }
 
+static uint8_t numbers[12][8] = {
+   {
+       0b00000000,
+       0b01111110,
+       0b01100110,
+       0b01100110,
+       0b01100110,
+       0b01100110,
+       0b01100110,
+       0b01111110,
+   },
+   {
+       0b00000000,
+       0b00000110,
+       0b00000110,
+       0b00000110,
+       0b00000110,
+       0b00000110,
+       0b00000110,
+       0b00000110,
+   },
+   {
+       0b00000000,
+       0b01111110,
+       0b00000110,
+       0b00000110,
+       0b01111110,
+       0b01100000,
+       0b01100000,
+       0b01111110,
+   },
+   {
+       0b00000000,
+       0b01111110,
+       0b00000110,
+       0b00000110,
+       0b01111110,
+       0b00000110,
+       0b00000110,
+       0b01111110,
+   },
+   {
+       0b00000000,
+       0b01100110,
+       0b01100110,
+       0b01100110,
+       0b01111110,
+       0b00000110,
+       0b00000110,
+       0b00000110,
+   },
+   {
+       0b00000000,
+       0b01111110,
+       0b01100000,
+       0b01100000,
+       0b01111110,
+       0b00000110,
+       0b00000110,
+       0b01111110,
+   },
+   {
+       0b00000000,
+       0b01111110,
+       0b01100000,
+       0b01100000,
+       0b01111110,
+       0b01100110,
+       0b01100110,
+       0b01111110,
+   },
+   {
+       0b00000000,
+       0b01111110,
+       0b00000110,
+       0b00000110,
+       0b00000110,
+       0b00000110,
+       0b00000110,
+       0b00000110,
+   },
+   {
+       0b00000000,
+       0b01111110,
+       0b01100110,
+       0b01100110,
+       0b01111110,
+       0b01100110,
+       0b01100110,
+       0b01111110,
+   },
+   {
+       0b00000000,
+       0b01111110,
+       0b01100110,
+       0b01100110,
+       0b01111110,
+       0b00000110,
+       0b00000110,
+       0b01111110,
+   },
+   {
+       0b00000000,
+       0b00000000,
+       0b00000000,
+       0b00000000,
+       0b00000000,
+       0b00000000,
+       0b00111000,
+       0b00111000,
+   },
+   {
+       0b00000000,
+       0b00000000,
+       0b00000000,
+       0b00000000,
+       0b01111110,
+       0b00000000,
+       0b00000000,
+       0b00000000,
+   },
 
-static void drive(double t, PFUNC(f), double *p, int w, int h, int linesize, int ofsX, int ofsY, double a, double phi, int form, uint8_t *buf) {
-    double complex _z = f(t,p);
-    double complex z = rotate(_z,phi);
-    int x = floor(creal(z) + w/2) + ofsX;
-    int y = floor(cimag(z) + h/2) + ofsY;
+};
+
+static void plotCh(char ch, int x, int y, int w, int h, int linesize, uint8_t *buf) {
+    uint8_t *bmp;
+    if(ch == '.') {
+        bmp = numbers[10];
+    } else if(ch == '-') {
+        bmp = numbers[11];
+    } else if(ch>=48 && ch<58) {
+        bmp = numbers[ch-48];
+    } else {
+        return;
+    }
+    int k,j;
+    for(k=0;k<8;k++) {
+        uint8_t b = bmp[k];
+        for(j=0;j<8;j++) {
+            if( (1 << 7-j)&b) {
+                plotPix(x+j,y+k,1,w,h,linesize,buf);
+            }
+        }
+    }
+}
+
+static void drawNumber(int x, int y, double z, int w, int h, int linesize, uint8_t *buf) {
+    char s[50];
+    sprintf(s,"%lf",z);
+    char *ptr = s;
+    int k = 0;
+    while(*ptr) {
+        plotCh(*ptr,x+k,y,w,h,linesize,buf);
+        ptr++;
+        k+=9;
+    }
+}
+
+
+
+
+static void plotForm(int form, int x, int y, double a, int w, int h,int linesize, uint8_t *buf) {
     switch(form) {
         case 0: plotPix(x,y,a,w,h,linesize,buf);
                 break;
@@ -394,36 +589,15 @@ static void drive(double t, PFUNC(f), double *p, int w, int h, int linesize, int
         default:plotPix(x,y,a,w,h,linesize,buf);
                 break;
     }
-} 
+}
 
-
-/********************
-static void kardioids(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *buf) {
-    double count = plot->p[0];
-    double speed = plot->p[1];
-    double tail = plot->p[2];
-    double tailStep = plot->p[3];
-    int k;
-    for(k=0;k<count;k++) {
-        double alpha = (k/count) * 2 * M_PI;
-        int ofsX = 0;
-        int ofsY = 0;
-        ofsX = 0;
-        ofsY = 0;
-        //int start = k%2==0?2*M_PI*(k%12)/12:2*M_PI*((k%12)+6)/12;
-        int start = 0;
-        double t = start + n*speed;
-        double e = fmax(0, t-tail);
-        double t0 = t;
-        double params[] = {plot->p[4],plot->p[5]};
-        while(t0>e) {
-            double a = 1-((t-t0)/tail);
-            drive(t0,kardio,params,w,h,linesize,ofsX,ofsY,a,alpha,buf);
-            t0-=tailStep;
-        }
-    }
+static void drive(double t, PFUNC(f), double *p, int w, int h, int linesize, int ofsX, int ofsY, double a, double phi, int form, uint8_t *buf) {
+    double complex _z = f(t,p);
+    double complex z = rotate(_z,phi);
+    int x = floor(p[38]*creal(z) + w/2) + ofsX;
+    int y = floor(p[39]*cimag(z) + h/2) + ofsY;
+    plotForm(form,x,y,a,w,h,linesize,buf);
 } 
-*********************/
 
 static void circs(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *buf) {
     double count = plot->count;
@@ -437,10 +611,9 @@ static void circs(PlotContext *plot, int n, int w, int h, int linesize, uint8_t 
         int j;
         int layers = plot->layers;
         for(j=0;j<layers;j++) {
-            double s = start + 2*M_PI*j/layers;
+            double s = start + plot->length*j/layers;
             double t = s + n*speed;
-            double params[] = {plot->p[0],plot->p[1]};
-            drive(t,psin,params,w,h,linesize,ofsX,ofsY,1,0,plot->form,buf);
+            drive(t,psin,plot->p,w,h,linesize,ofsX,ofsY,1,0,plot->form,buf);
         }
     }
 } 
@@ -457,10 +630,9 @@ static void kardioids(PlotContext *plot, int n, int w, int h, int linesize, uint
         double start = 0;
         int layers = plot->layers;
         for(j=0;j<layers;j++) {
-            double s = start + 2*M_PI*j/layers;
+            double s = start + plot->length*j/layers;
             double t = s + n*speed;
-            double params[] = {plot->p[0],plot->p[1]};
-            drive(t,kardio,params,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
+            drive(t,kardio,plot->p,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
         }
     }
 }
@@ -477,10 +649,9 @@ static void lemG(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *
         double start = 0;
         int layers = plot->layers;
         for(j=0;j<layers;j++) {
-            double s = start + 2*M_PI*j/layers;
+            double s = start + plot->length*j/layers;
             double t = s + n*speed;
-            double params[] = {plot->p[0],plot->p[1]};
-            drive(t,lemniskateG,params,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
+            drive(t,lemniskateG,plot->p,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
         }
     }
 }
@@ -497,10 +668,9 @@ static void lemB(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *
         double start = 0;
         int layers = plot->layers;
         for(j=0;j<layers;j++) {
-            double s = start + 2*M_PI*j/layers;
+            double s = start + plot->length*j/layers;
             double t = s + n*speed;
-            double params[] = {plot->p[0],plot->p[1]};
-            drive(t,lemniskateB,params,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
+            drive(t,lemniskateB,plot->p,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
         }
     }
 }
@@ -517,19 +687,70 @@ static void epi(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *b
         double start = 0;
         int layers = plot->layers;
         for(j=0;j<layers;j++) {
-            double s = start + 2*M_PI*j/layers;
+            double s = start + plot->length*j/layers;
             double t = s + n*speed;
-            double params[] = {plot->p[0],plot->p[1]};
-            drive(t,epizycloid,params,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
+            drive(t,epizycloid,plot->p,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
         }
     }
+}
+
+static void lissGP(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *buf) {
+    double t = 0;
+    double tmp = plot->p[1];
+    double tmp5 = plot->p[4];
+    double x = plot->nfunc(n,plot->np);
+    plot->p[1]+=x;
+    plot->p[4]+=x;
+    while(t<plot->length) {
+        int ofsX = plot->x;
+        int ofsY = plot->y;
+        drive(t,lissajousG,plot->p,w,h,linesize,ofsX,ofsY,1,0,plot->form,buf);
+        t+=plot->speed;
+    }
+    drawNumber(w-200, h-15, plot->p[1], w, h, linesize, buf);
+    plot->p[1] = tmp;
+    plot->p[4] = tmp5;
+}
+
+
+static void lissQP(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *buf) {
+    double t = 0;
+    double tmp = plot->p[1];
+    double x = plot->nfunc(n,plot->np);
+    plot->p[1]+=x;
+    while(t<plot->length) {
+        int ofsX = plot->x;
+        int ofsY = plot->y;
+        drive(t,lissajousQ,plot->p,w,h,linesize,ofsX,ofsY,1,0,plot->form,buf);
+        t+=plot->speed;
+    }
+    drawNumber(w-200, h-15, plot->p[1], w, h, linesize, buf);
+    plot->p[1] = tmp;
+}
+
+static void lissP(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *buf) {
+    double t = 0;
+    double tmp = plot->p[1];
+    double x = plot->nfunc(n,plot->np);
+    plot->p[1]+=x;
+    while(t<plot->length) {
+        int ofsX = 0;
+        int ofsY = 0;
+        double alpha = 0;
+        drive(t,lissajous,plot->p,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
+        t+=plot->speed;
+    }
+    drawNumber(w-200, h-15, plot->p[1], w, h, linesize, buf);
+    plot->p[1] = tmp;
 }
 
 static void liss(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *buf) {
     double count = plot->count;
     double speed = plot->speed;
     int k;
-    plot->p[1]-=n*0.0000001;
+    double tmp = plot->p[1];
+    double x = plot->nfunc(n,plot->np);
+    plot->p[1]-=x;
     for(k=0;k<count;k++) {
         double alpha = (k/count) * 2 * M_PI;
         int ofsX = 0;
@@ -538,13 +759,68 @@ static void liss(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *
         double start = 0;
         int layers = plot->layers;
         for(j=0;j<layers;j++) {
-            double s = start + 6*M_PI*j/layers;
+            double s = start + plot->length*j/layers;
             double t = s + n*speed;
             drive(t,lissajous,plot->p,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
         }
     }
+    plot->p[1] = tmp;
 }
 
+static void leg(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *buf) {
+    double count = plot->count;
+    double speed = plot->speed;
+    int k;
+    for(k=0;k<count;k++) {
+        double alpha = (k/count) * 2 * M_PI;
+        int ofsX = 0;
+        int ofsY = 0;
+        int j;
+        double start = 0;
+        int layers = plot->layers;
+        for(j=0;j<layers;j++) {
+            double s = start + plot->length*j/layers;
+            double t = s + n*speed;
+            drive(t,legendre,plot->p,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
+        }
+    }
+}
+
+static void hypo(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *buf) {
+    double count = plot->count;
+    double speed = plot->speed;
+    int k;
+    for(k=0;k<count;k++) {
+        double alpha = (k/count) * 2 * M_PI;
+        int ofsX = 0;
+        int ofsY = 0;
+        int j;
+        double start = 0;
+        int layers = plot->layers;
+        for(j=0;j<layers;j++) {
+            double s = start + plot->length*j/layers;
+            double t = s + n*speed;
+            drive(t,hypocycloid,plot->p,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
+        }
+    }
+}
+
+
+static void cbP(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *buf) {
+    double t = plot->p[39];
+    double x = plot->nfunc(n,plot->np);
+    double tmp = plot->p[2];
+    plot->p[2]+=x;
+    while(t<plot->length) {
+        int ofsX = plot->x;
+        int ofsY = plot->y;
+        double alpha = 0;
+        drive(t,cb,plot->p,w,h,linesize,ofsX,ofsY,1,alpha,plot->form,buf);
+        t+=plot->speed;
+    }
+    drawNumber(w-200, h-15, plot->p[2], w, h, linesize, buf);
+    plot->p[2] = tmp;
+}
 
 static void zero(PlotContext *plot, int n, int w, int h, int linesize, uint8_t *buf) {
 }
@@ -556,6 +832,12 @@ static FFunc ffuncs[] = {
     {"lemB",lemB},
     {"epi",epi},
     {"liss",liss},
+    {"lissP",lissP},
+    {"lissQP",lissQP},
+    {"lissGP",lissGP},
+    {"cbP",cbP},
+    {"leg",leg},
+    {"hypo",hypo},
     {NULL,NULL}
 };
 
@@ -584,7 +866,8 @@ static av_cold void logParameters(AVFilterContext *ctx,double* p, int len) {
 static av_cold int plot_init(AVFilterContext *ctx)
 {
     PlotContext *plot = ctx->priv;
-    av_log(ctx, AV_LOG_INFO, "rgb=%d ofs=%d x=%f y=%f xn=%f yn=%f, layers=%d speed=%f count=%d dim=%d\n", plot->is_rgb, plot->offset, plot->x, plot->y, plot->xn, plot->yn, plot->layers, plot->speed, plot->count, plot->dim);
+    av_log(ctx, AV_LOG_INFO, "rgb=%d ofs=%d x=%f y=%f xn=%f yn=%f, layers=%d speed=%f length=%f count=%d dim=%d\n", 
+            plot->is_rgb, plot->offset, plot->x, plot->y, plot->xn, plot->yn, plot->layers, plot->speed, plot->length, plot->count, plot->dim);
     if(plot->w) {
         plot->wfunc = getNFunc(plot->w);
         if(!plot->wfunc) {
