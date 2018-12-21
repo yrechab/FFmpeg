@@ -76,8 +76,8 @@ double complex av_genutil_lissajousQ(double t, double *p) {
     double b = p[1];
     double c = p[2];
     double d = p[3];
-    double x = cos(t) + a * sin(b*t) * sin(b*t);
-    double y = sin(t) + c * sin(d*t) * sin(d*t);
+    double x = p[4] * cos(t) + a * sin(b*t) * sin(b*t) + p[6];
+    double y = p[5] * sin(t) + c * sin(d*t) * sin(d*t) + p[7];
     return x + I * y;
 }
 

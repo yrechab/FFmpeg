@@ -603,13 +603,13 @@ static av_cold int init(AVFilterContext *ctx)
         if(s->n[k]) {
             s->nfunc[k] = av_genutil_get_nfunc(s->n[k]);
             if(!s->nfunc[k]) {
-                av_log(ctx, AV_LOG_WARNING, "function for nf%d not found %s\n", k, s->n[k]);
+                av_log(ctx, AV_LOG_WARNING, "function for n%d not found %s\n", k, s->n[k]);
             } else {
-                av_log(ctx, AV_LOG_INFO, "function for nf%d is %s", k, s->n[k]);
+                av_log(ctx, AV_LOG_INFO, "function for n%d is %s", k, s->n[k]);
                 log_parameters(ctx,s->np[k],10);
             }
         } else {
-            av_log(ctx, AV_LOG_WARNING, "no function given for n\n");
+            av_log(ctx, AV_LOG_WARNING, "no function given for n%d\n",k);
         }
     }
     
@@ -837,8 +837,11 @@ static int plot_freqs(AVFilterLink *inlink, AVFrame *in)
         for(k=0;k<len;k++) {
             buf[k] =  av_clipd(M(RE(k+ranges[index], 0), IM(k+ranges[index], 0)) / s->scale, 0, 1);
         }
-        if(s->weights[index])
+        if(s->weights[index]) {
             s->p[i] = freq_avg(s->last[i],s->ag,s->weights[index] *  av_genutil_avg(buf,len));
+        } else if(s->nfunc[index]) {
+            s->p[i] = s->nfunc[index](inlink->frame_count_out,s->np[i]);
+        }
     }
     s->ffunc(s,inlink->frame_count_out,out);
     copy0(s,out);
