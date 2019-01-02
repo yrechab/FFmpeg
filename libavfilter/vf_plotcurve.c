@@ -286,6 +286,31 @@ static void curve(PlotCurveContext *plotcurve, PFUNC(f),int n, AVFrame *in) {
     }
 }
 
+static void curve2(PlotCurveContext *plotcurve, PFUNC(f),int n, AVFrame *in) {
+    blackYUV(plotcurve,in);
+    double t = plotcurve->start;
+    int k;
+    for(k=0;k<4;k++) {
+        if(plotcurve->nfunc[k]) {
+            plotcurve->p[plotcurve->nx[k]] = plotcurve->nfunc[k](n,plotcurve->np[k]);
+            if(plotcurve->dbg) drawNumber(plotcurve->w-k*100-100, plotcurve->h-35, plotcurve->p[plotcurve->nx[k]], in);
+        }
+    }
+    while(t<plotcurve->start+plotcurve->length) {
+        double colors[3];
+        av_genutil_get_color(plotcurve->cfunc, plotcurve->cp,t,plotcurve->cmod, plotcurve->is_rgb, colors);
+        drawPoint(plotcurve,in,0,t,f,colors[0]);
+        drawPoint(plotcurve,in,1,t,f,colors[1]);
+        drawPoint(plotcurve,in,2,t,f,colors[2]);
+
+        drawPoint(plotcurve,in,0,-t,f,colors[0]);
+        drawPoint(plotcurve,in,1,-t,f,colors[1]);
+        drawPoint(plotcurve,in,2,-t,f,colors[2]);
+
+        t+=plotcurve->delta;
+    }
+}
+
 static void lissG(PlotCurveContext *plotcurve, int n, AVFrame *in) {
     curve(plotcurve,av_genutil_lissajousG,n,in);
 }
@@ -330,6 +355,30 @@ static void circ(PlotCurveContext *plotcurve, int n, AVFrame *in) {
     curve(plotcurve,av_genutil_circoid,n,in);
 }
 
+static void rhodo(PlotCurveContext *plotcurve, int n, AVFrame *in) {
+    curve(plotcurve,av_genutil_rhodonea,n,in);
+}
+
+static void super_rose(PlotCurveContext *plotcurve, int n, AVFrame *in) {
+    curve(plotcurve,av_genutil_super_rose,n,in);
+}
+
+static void super_spiral(PlotCurveContext *plotcurve, int n, AVFrame *in) {
+    curve(plotcurve,av_genutil_super_rose,n,in);
+}
+
+static void epi_spiral(PlotCurveContext *plotcurve, int n, AVFrame *in) {
+    curve(plotcurve,av_genutil_epi_spiral,n,in);
+}
+
+static void spiral(PlotCurveContext *plotcurve, int n, AVFrame *in) {
+    curve2(plotcurve,av_genutil_spiral,n,in);
+}
+
+static void maclaurin(PlotCurveContext *plotcurve, int n, AVFrame *in) {
+    curve(plotcurve,av_genutil_maclaurin,n,in);
+}
+
 static void zero(PlotCurveContext *plotcurve, int n, AVFrame *in) {
 }
 
@@ -345,6 +394,12 @@ static FFunc ffuncs[] = {
     {"circ",circ},
     {"scara",scara},
     {"tro",tro},
+    {"rhodo",rhodo},
+    {"superrose",super_rose},
+    {"epispiral",epi_spiral},
+    {"superspiral",super_spiral},
+    {"spiral",spiral},
+    {"maclaurin",maclaurin},
     {NULL,NULL}
 };
 

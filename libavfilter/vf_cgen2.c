@@ -430,6 +430,18 @@ static uint8_t ftan(int plane,int x, int y, int w, int h, int n, CGen2Context *c
 static uint8_t fexpr(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
     return ffunc(expr,plane,x,y,w,h,n,ctx);
 }
+static uint8_t fsins(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    return ffunc2(sinr,plane,x,y,w,h,n,ctx);
+}
+
+static uint8_t ftans(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    return ffunc2(tanr,plane,x,y,w,h,n,ctx);
+}
+
+static uint8_t fexprs(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    return ffunc2(expr,plane,x,y,w,h,n,ctx);
+}
+
 
 
 static uint8_t map(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
@@ -459,6 +471,9 @@ static Func funcs[] = {
     { "fexpr", fexpr },
     { "fsin", fsin },
     { "ftan", ftan },
+    { "fexprs", fexprs },
+    { "fsins", fsins },
+    { "ftans", ftans },
     { "fid", fid },
     { NULL, NULL }
 };

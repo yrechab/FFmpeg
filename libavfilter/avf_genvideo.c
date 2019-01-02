@@ -41,6 +41,8 @@ enum DisplayMode    { LINE, BAR, DOT, NB_MODES };
 enum ChannelMode    { COMBINED, SEPARATE, NB_CMODES };
 enum FrequencyScale { FS_LINEAR, FS_LOG, FS_RLOG, NB_FSCALES };
 enum AmplitudeScale { AS_LINEAR, AS_SQRT, AS_CBRT, AS_LOG, NB_ASCALES };
+#define PC 40
+#define NC 10
 
 typedef struct GenVideoContext {
     const AVClass *class;
@@ -66,13 +68,16 @@ typedef struct GenVideoContext {
     AVAudioFifo *fifo;
     int64_t pts;
 
-    double p[40];
+    double p[PC];
+    double _p[PC];
     double (*nfunc[4])(int,double*);
-    int nx[4];
-    double np[4][10];
-    const char *n[4];    
+    double np[4][NC];
+    double _np[4][NC];
+    const char *n[4];
+    int nmod[4]; // modulo n
     double (*cfunc[3])(double,double*);
-    double cp[3][10];
+    double cp[3][NC];
+    double _cp[3][NC];
     const char *c[3];
     int cmod; // YUV = 0, RGB = 1, HSV = 2
     double fx;
@@ -97,17 +102,19 @@ typedef struct GenVideoContext {
     int alpha;
     int dbg;
     int offset;
-    double weights[10];
-    int refs[10];
-    double last[4][10];
+    double last[10][10];
     char *f;
     void (*ffunc)(struct GenVideoContext*,int,AVFrame *in);
     int ag;
     uint8_t *lastFrame;
+    char *rf[20];
 } GenVideoContext;
 
 #define OFFSET(x) offsetof(GenVideoContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
+#define RE(x, ch) s->fft_data[ch][x].re
+#define IM(x, ch) s->fft_data[ch][x].im
+#define M(a, b) (sqrt((a) * (a) + (b) * (b)))
 
 typedef struct FFunc {
     const char *name;
@@ -269,21 +276,8 @@ static const AVOption genvideo_options[] = {
     { "c28","c28",   OFFSET(cp[2][8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "c29","c29",   OFFSET(cp[2][9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
 
-
-    { "w0","w0",   OFFSET(weights[0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "w1","w1",   OFFSET(weights[1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "w2","w2",   OFFSET(weights[2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "w3","w3",   OFFSET(weights[3]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "w4","w4",   OFFSET(weights[4]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "w5","w5",   OFFSET(weights[5]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "w6","w6",   OFFSET(weights[6]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "w7","w7",   OFFSET(weights[7]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "w8","w8",   OFFSET(weights[8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "w9","w9",   OFFSET(weights[9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-
-
-    { "n0",  "n0",   OFFSET(n[0]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "nx0","nx0",   OFFSET(nx[0]),   AV_OPT_TYPE_INT,    {.i64 =  0}, 0,  39,  FLAGS },
+    { "n0",  "n0",   OFFSET(n[0]),     AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nm0","nm0",   OFFSET(nmod[0]),  AV_OPT_TYPE_INT,    {.i64=0},    0,        INT_MAX,        FLAGS },
     { "n00","n00",   OFFSET(np[0][0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n01","n01",   OFFSET(np[0][1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n02","n02",   OFFSET(np[0][2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -295,7 +289,7 @@ static const AVOption genvideo_options[] = {
     { "n08","n08",   OFFSET(np[0][8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n09","n09",   OFFSET(np[0][9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n1",  "n1",   OFFSET(n[1]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "nx1","nx1",   OFFSET(nx[1]),   AV_OPT_TYPE_INT,    {.i64 =  1}, 0,  39,  FLAGS },
+    { "nm1","nm1",   OFFSET(nmod[1]),  AV_OPT_TYPE_INT,    {.i64=0},    0,        INT_MAX,        FLAGS },
     { "n10","n10",   OFFSET(np[1][0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n11","n11",   OFFSET(np[1][1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n12","n12",   OFFSET(np[1][2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -307,7 +301,7 @@ static const AVOption genvideo_options[] = {
     { "n18","n18",   OFFSET(np[1][8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n19","n19",   OFFSET(np[1][9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n2",  "n2",  OFFSET(n[2]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "nx2","nx2",   OFFSET(nx[2]),   AV_OPT_TYPE_INT,    {.i64 =  2}, 0,  39,  FLAGS },
+    { "nm2","nm2",   OFFSET(nmod[2]),  AV_OPT_TYPE_INT,    {.i64=0},    0,        INT_MAX,        FLAGS },
     { "n20","n20",   OFFSET(np[2][0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n21","n21",   OFFSET(np[2][1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n22","n22",   OFFSET(np[2][2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -319,7 +313,7 @@ static const AVOption genvideo_options[] = {
     { "n28","n28",   OFFSET(np[2][8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n29","n29",   OFFSET(np[2][9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n3",  "n3",   OFFSET(n[3]),      AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "nx3","nx3",   OFFSET(nx[3]),   AV_OPT_TYPE_INT,    {.i64 =  3}, 0,  39,  FLAGS },
+    { "nm3","nm3",   OFFSET(nmod[3]),  AV_OPT_TYPE_INT,    {.i64=0},    0,        INT_MAX,        FLAGS },
     { "n30","n30",   OFFSET(np[3][0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n31","n31",   OFFSET(np[3][1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n32","n32",   OFFSET(np[3][2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -332,17 +326,16 @@ static const AVOption genvideo_options[] = {
     { "n39","n39",   OFFSET(np[3][9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
 
 
-    { "r0","r0",   OFFSET(refs[0]), AV_OPT_TYPE_INT, {.i64 =  0}, 0,  9,  FLAGS },
-    { "r1","r1",   OFFSET(refs[1]), AV_OPT_TYPE_INT, {.i64 =  1}, 0,  9,  FLAGS },
-    { "r2","r2",   OFFSET(refs[2]), AV_OPT_TYPE_INT, {.i64 =  2}, 0,  9,  FLAGS },
-    { "r3","r3",   OFFSET(refs[3]), AV_OPT_TYPE_INT, {.i64 =  3}, 0,  9,  FLAGS },
-    { "r4","r4",   OFFSET(refs[4]), AV_OPT_TYPE_INT, {.i64 =  0}, 0,  9,  FLAGS },
-    { "r5","r5",   OFFSET(refs[5]), AV_OPT_TYPE_INT, {.i64 =  0}, 0,  9,  FLAGS },
-    { "r6","r6",   OFFSET(refs[6]), AV_OPT_TYPE_INT, {.i64 =  0}, 0,  9,  FLAGS },
-    { "r7","r7",   OFFSET(refs[7]), AV_OPT_TYPE_INT, {.i64 =  0}, 0,  9,  FLAGS },
-    { "r8","r8",   OFFSET(refs[8]), AV_OPT_TYPE_INT, {.i64 =  0}, 0,  9,  FLAGS },
-    { "r9","r9",   OFFSET(refs[9]), AV_OPT_TYPE_INT, {.i64 =  0}, 0,  9,  FLAGS },
-
+    { "r0", "r0",  OFFSET(rf[0]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r1", "r1",  OFFSET(rf[1]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r2", "r2",  OFFSET(rf[2]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r3", "r3",  OFFSET(rf[3]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r4", "r4",  OFFSET(rf[4]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r5", "r5",  OFFSET(rf[5]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r6", "r6",  OFFSET(rf[6]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r7", "r7",  OFFSET(rf[7]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r8", "r8",  OFFSET(rf[8]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r9", "r9",  OFFSET(rf[9]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
 
 
     { "cmod","cmod",OFFSET(cmod), AV_OPT_TYPE_INT,    {.i64=2},    0,        2,        FLAGS },
@@ -394,9 +387,9 @@ static void draw_number(int x, int y, double z, AVFrame *in) {
     av_plot_number(x,y,z,in->width,in->height,in->linesize[0],in->data[0]);
 }
 
-static void drawPoint(GenVideoContext *genvideo, AVFrame *in, int plane, double t, PFUNC(f), double a,int ofsX, int ofsY) {
-    double complex _z = f(t,genvideo->p);
-    double complex z = av_genutil_rotate(_z,genvideo->rot);
+static void drawPoint(GenVideoContext *genvideo, AVFrame *in, int plane, double t, PFUNC(f), double a,double phi,int ofsX, int ofsY) {
+    double complex _z = f(t,genvideo->_p);
+    double complex z = av_genutil_rotate(_z,phi);
     int _x = floor(genvideo->fx*creal(z) + genvideo->w/2) + genvideo->x + ofsX;
     int _y = floor(genvideo->fy*cimag(z) + genvideo->h/2) + genvideo->y + ofsY;
     int x,y,w,h;
@@ -445,15 +438,16 @@ static void curve(GenVideoContext *genvideo, PFUNC(f),int n, AVFrame *in) {
     int k;
     if(genvideo->dbg) {
         for(k=0;k<4;k++) {
-            draw_number(genvideo->w-k*100-100, genvideo->h-35, genvideo->p[k], in);
+            draw_number(genvideo->w-k*100-100, genvideo->h-35, genvideo->_p[k], in);
         }
+        draw_number(100, genvideo->h-35, n, in);
     }
     while(t<genvideo->start+genvideo->length) {
         double colors[3];
-        av_genutil_get_color(genvideo->cfunc, genvideo->cp,t,genvideo->cmod, genvideo->is_rgb, colors);
-        drawPoint(genvideo,in,0,t,f,colors[0],0,0);
-        drawPoint(genvideo,in,1,t,f,colors[1],0,0);
-        drawPoint(genvideo,in,2,t,f,colors[2],0,0);
+        av_genutil_get_color(genvideo->cfunc, genvideo->_cp,t,genvideo->cmod, genvideo->is_rgb, colors);
+        drawPoint(genvideo,in,0,t,f,colors[0],0,0,0);
+        drawPoint(genvideo,in,1,t,f,colors[1],0,0,0);
+        drawPoint(genvideo,in,2,t,f,colors[2],0,0,0);
         t+=genvideo->delta;
     }
 }
@@ -505,6 +499,10 @@ static void circ(GenVideoContext *genvideo, int n, AVFrame *in) {
     curve(genvideo,av_genutil_circoid,n,in);
 }
 
+static void super_rose(GenVideoContext *genvideo, int n, AVFrame *in) {
+    curve(genvideo,av_genutil_super_rose,n,in);
+}
+
 static void zero(GenVideoContext *genvideo, int n, AVFrame *in) {
 }
 
@@ -514,29 +512,65 @@ static void circs(GenVideoContext *genvideo, int n, AVFrame *in) {
     if(genvideo->dbg) {
         int k;
         for(k=0;k<4;k++) {
-            draw_number(genvideo->w-k*100-100, genvideo->h-35, genvideo->p[k], in);
+            draw_number(genvideo->w-k*100-100, genvideo->h-35, genvideo->_p[k], in);
         }
     }
 
-    double count = genvideo->count + (int)genvideo->p[3];
+    double count = genvideo->count + (int)genvideo->_p[3];
     double speed = genvideo->speed;
     int k;
     for(k=0;k<count;k++) {
         double alpha = (k/count) * 2 * M_PI;
-        int ofsX = floor(cos(alpha) * genvideo->p[0]);
-        int ofsY = floor(sin(alpha) * genvideo->p[1]);
+        int ofsX = floor(cos(alpha) * genvideo->_p[0]);
+        int ofsY = floor(sin(alpha) * genvideo->_p[1]);
         double start = 2*M_PI*k/count;
         int j;
         //int layers = genvideo->layers;
-        int layers = genvideo->layers + (int)genvideo->p[2];
+        int layers = genvideo->layers + (int)genvideo->_p[2];
         for(j=0;j<layers;j++) {
             double s = start + genvideo->length*j/layers;
             double t = s + n*speed;
-            drawPoint(genvideo,in,genvideo->alpha?3:0,t,av_genutil_circ,genvideo->alpha?0:1,ofsX,ofsY);
+            drawPoint(genvideo,in,genvideo->alpha?3:0,t,av_genutil_circ,genvideo->alpha?0:1,0,ofsX,ofsY);
         }
     }
 } 
 
+static void plot(GenVideoContext *genvideo, PFUNC(f),int n, AVFrame *in) {
+    blackYUV(genvideo,in);
+    if(genvideo->dbg) {
+        int k;
+        for(k=0;k<2;k++) {
+            draw_number(genvideo->w-k*100-100, genvideo->h-35, genvideo->_p[k], in);
+        }
+        draw_number(genvideo->w-2*100-100, genvideo->h-35, genvideo->_p[38], in);
+        draw_number(genvideo->w-3*100-100, genvideo->h-35, genvideo->_p[39], in);
+    }
+    double count = genvideo->count + (int)genvideo->_p[39];
+    double speed = genvideo->speed;
+    int k;
+    for(k=0;k<count;k++) {
+        double alpha = (k/count) * 2 * M_PI;
+        int j;
+        double start = 0;
+        int layers = genvideo->layers + (int)genvideo->_p[38];
+        for(j=0;j<layers;j++) {
+            double s = start + genvideo->length*j/layers;
+            double t = s + n*speed;
+            drawPoint(genvideo,in,genvideo->alpha?3:0,t,av_genutil_circ,genvideo->alpha?0:1,alpha,0,0);
+        }
+    }
+}
+static void lemG(GenVideoContext *genvideo, int n, AVFrame *in) {
+    plot(genvideo,av_genutil_lemniskateG,n,in);
+}
+
+static void lemB(GenVideoContext *genvideo, int n, AVFrame *in) {
+    plot(genvideo,av_genutil_lemniskateB,n,in);
+}
+
+static void trop(GenVideoContext *genvideo, int n, AVFrame *in) {
+    plot(genvideo,av_genutil_trochoid,n,in);
+}
 
 
 static FFunc ffuncs[] = {
@@ -552,6 +586,10 @@ static FFunc ffuncs[] = {
     {"circs",circs},
     {"scara",scara},
     {"tro",tro},
+    {"trop",trop},
+    {"lemG",lemG},
+    {"lemB",lemB},
+    {"superrose",super_rose},
     {NULL,NULL}
 };
 
@@ -637,7 +675,7 @@ static av_cold int init(AVFilterContext *ctx)
             s->ffunc = zero;
         } else {
             av_log(ctx, AV_LOG_INFO, "function for f is %s\n", s->f);
-            log_parameters(ctx,s->p,40);
+            log_parameters(ctx,s->p,PC);
         }
     } else {
         av_log(ctx, AV_LOG_WARNING, "no function given for f\n");
@@ -647,7 +685,13 @@ static av_cold int init(AVFilterContext *ctx)
     s->lastFrame = av_calloc(1920*1080,sizeof(uint8_t));
     initLast(s);
     s->pts = AV_NOPTS_VALUE;
-
+    /*
+    for(k=0;k<10;k++) {
+        if(s->rf[k]) {
+            av_genutil_replace_char(s->rf[k],'|',' ');
+        }
+    }
+    */
     return 0;
 }
 
@@ -784,6 +828,83 @@ static void copy0(GenVideoContext *genvideo, AVFrame *out) {
  
 }
 
+static int modify(GenVideoContext *s, int frameNumber) {
+    int j,i,k;
+    const char *format = "%s %d %s %s %d %lf %d %d %d";
+    const int win_size = s->win_size;
+    double buf[win_size];
+    i=0;
+    for(j=0;j<10;j++) {
+        if(s->rf[j]) {
+            char input[40];
+            char target[4];
+            char src[4];
+            char mode[4];
+            int index,m,a,b,ag;
+            double amount;
+            strcpy(input, s->rf[j]);
+            sscanf(input, format, target, &index, mode, src, &m, &amount, &a, &b, &ag);
+            double value;
+            switch(src[0]) {
+                case 'a': {
+                    int len = b-a+1;
+                    for(k=0;k<len;k++) {
+                        buf[k] =  av_clipd(M(RE(k+a, 0), IM(k+a, 0)) / s->scale, 0, 1);
+                    }
+                    value = freq_avg(s->last[i],ag,amount *  av_genutil_avg(buf,len));
+                    break;
+                }
+                case 'n': {
+                    value = s->nfunc[m](s->nmod[m]?frameNumber%s->nmod[m]:frameNumber,s->_np[m]);
+                    break;
+                }                             
+            }
+            switch(target[0]) {
+                case 'p': {
+                    if(mode[0] == 'o') s->_p[index] = value;
+                    if(mode[0] == 'a') s->_p[index] = s->_p[index] + value;
+                    if(mode[0] == 's') s->_p[index] = s->_p[index] - value;
+                    break;
+                }
+                case 'c': {
+                    int f = index/10;
+                    int i = index % 10;
+                    if(mode[0] == 'o') s->_cp[f][i] = value;
+                    if(mode[0] == 'a') s->_cp[f][i] = s->cp[f][i] + value;
+                    if(mode[0] == 's') s->_cp[f][i] = s->cp[f][i] - value;
+                    break;
+                }
+                case 'n': {
+                    int f = index/10;
+                    int i = index % 10;
+                    if(mode[0] == 'o') s->_np[f][i] = value;
+                    if(mode[0] == 'a') s->_np[f][i] = s->np[f][i] + value;
+                    if(mode[0] == 's') s->_np[f][i] = s->np[f][i] - value;
+                    
+                }
+            }
+        }
+        i++;
+    }
+    return 0;
+}
+
+static void copy_params(GenVideoContext *genvideo) {
+    int k,j;
+    for(k=0;k<PC;k++) {
+        genvideo->_p[k] = genvideo->p[k];
+    }
+    for(k=0;k<3;k++) {
+        for(j=0;j<NC;j++) {
+            genvideo->_cp[k][j] = genvideo->cp[k][j];
+        }
+    }
+    for(k=0;k<4;k++) {
+        for(j=0;j<NC;j++) {
+            genvideo->_np[k][j] = genvideo->np[k][j];
+        }
+    }
+}
 static int plot_freqs(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
@@ -819,30 +940,8 @@ static int plot_freqs(AVFilterLink *inlink, AVFrame *in)
         av_fft_permute(s->fft, s->fft_data[ch]);
         av_fft_calc(s->fft, s->fft_data[ch]);
     }
-
-#define RE(x, ch) s->fft_data[ch][x].re
-#define IM(x, ch) s->fft_data[ch][x].im
-#define M(a, b) (sqrt((a) * (a) + (b) * (b)))
-    int ranges[] = { 1, 10, 50, 1000, 1400 };
-    double buf[win_size];
-    int i,k;
-    
-    for(i=0;i<4;i++) {
-        int index = s->refs[i];
-        if(index >= 4) {
-            av_log(ctx, AV_LOG_ERROR, "index %d too big\n", index);
-            return AVERROR(EINVAL);
-        }
-        int len = ranges[index+1]-ranges[index];
-        for(k=0;k<len;k++) {
-            buf[k] =  av_clipd(M(RE(k+ranges[index], 0), IM(k+ranges[index], 0)) / s->scale, 0, 1);
-        }
-        if(s->weights[index]) {
-            s->p[i] = freq_avg(s->last[i],s->ag,s->weights[index] *  av_genutil_avg(buf,len));
-        } else if(s->nfunc[index]) {
-            s->p[i] = s->nfunc[index](inlink->frame_count_out,s->np[i]);
-        }
-    }
+    copy_params(s);
+    modify(s,inlink->frame_count_out);
     s->ffunc(s,inlink->frame_count_out,out);
     copy0(s,out);
     out->pts = in->pts;

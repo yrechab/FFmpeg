@@ -49,6 +49,14 @@ double complex av_genutil_circoid(double t,  double *p) {
     return x + I * y;
 }
 
+double complex av_genutil_epicycloid(double t, double *p) {
+    double a = p[0];
+    double b = p[1];
+    double x = (a+b)*cos(t) - a * cos((1+b/a)*t);
+    double y = (a+b)*sin(t) - a * sin((1+b/a)*t);
+    return x + I * y;
+}
+
 double complex av_genutil_lissajous(double t, double *p) {
     if(p[3]==0 && p[4] == 0) p[4] = 1.0;
     double a = p[1];
@@ -110,6 +118,14 @@ double complex av_genutil_hypocycloid(double t, double *p) {
     return x + I * y;
 }
 
+double complex av_genutil_rhodonea(double t, double *p) {
+    double a = (1-1/p[1])/2;
+    double b = 1/a - 1; 
+    double x = p[0]*((1-a)*cos(a*t)+a*b*cos((1-a)*t));
+    double y = p[0]*((1-a)*sin(a*t)-a*b*sin((1-a)*t));
+    return x + I * y;
+}
+
 double complex av_genutil_cb(double t, double *p) {
     double a = p[2];
     double b = p[3];
@@ -128,11 +144,84 @@ double complex av_genutil_capricornoid(double t, double *p) {
 double complex av_genutil_scarabaeus(double t, double *p) {
     double a = p[0];
     double b = p[1];
-    double x = (a*cos(2*t) + b*cos(t))*cos(t);
-    double y = (a*cos(2*t) + b*cos(t))*sin(t);
+    double r = a*cos(2*t) + b*cos(t);
+    return r*cos(t) + I * r*sin(t);
+}
+
+double complex av_genutil_nodal(double t, double *p) {
+    double a = p[0];
+    double r = tan(a*t);
+    return r*cos(t) + I * r*sin(t);
+}
+
+double complex av_genutil_talbot(double t, double *p) {
+    double a = p[0];
+    double x = (1+a*sin(t)*sin(t))*cos(t);
+    double y = (1-a-a*cos(t)*cos(t))*sin(t);
     return x + I * y;
 }
 
+double complex av_genutil_folium(double t, double *p) {
+    double a = p[0];
+    double r = (sin(t)*sin(t)-a)*cos(t);
+    return r*cos(t) + I * r*sin(t);
+}
+
+static double super(double t, double a, double b, double c, double d) {
+    return pow(pow(fabs(cos(d*t)),a)+pow(fabs(sin(d*t)),b),c);
+}
+
+double complex av_genutil_gielis(double t, double *p) {
+    double r = super(t,p[0],p[1],p[2],p[3]);
+    return r*cos(t) + I * r*sin(t);
+}
+
+double complex av_genutil_super_spiral(double t, double *p) {
+    double r = exp(p[4]*t) * super(t,p[0],p[1],p[2],p[3]);
+    return r*cos(t) + I * r * sin(t);
+}
+
+double complex av_genutil_super_rose(double t, double *p) {
+    double r = sin(p[4]*t) * super(t,p[0],p[1],p[2],p[3]);
+    return r*cos(t) + I * r * sin(t);
+}
+
+double complex av_genutil_epi_spiral(double t, double *p) {
+    double r = 1/cos(p[0]*t);
+    return r*cos(t) + I * r * sin(t);
+}
+
+double complex av_genutil_spiral(double t, double *p) {
+    double phi = p[0]*t+p[2];
+    double r;
+    if(phi<0) {
+        r = -pow(-phi,p[1]);
+        return r*cos(t) - I * r * sin(t);
+        //return -r*sin(t) - I * r * cos(t);
+    }
+    r = pow(phi, p[1]);
+    return r*cos(t) + I * r * sin(t);
+}
+
+double complex av_genutil_atom_spiral(double t, double *p) {
+    double r = t/(t-p[0]);
+    return r*cos(t) + I * r * sin(t);
+}
+
+double complex av_genutil_cotes_spiral(double t, double *p) {
+    double r = t/cosh(t*p[0]);
+    return r*cos(t) + I * r * sin(t);
+}
+
+double complex av_genutil_sin_spiral(double t, double *p) {
+    double r = pow(sin(p[0]*t),p[0]);
+    return r*cos(t) + I * r * sin(t);
+}
+
+double complex av_genutil_maclaurin(double t, double *p) {
+    double r = sin(p[0]*t+p[1])/sin(p[2]*t+p[3]);
+    return r*cos(t) + I * r * sin(t);
+}
 
 /* ============================= NFUNCS *******************************************/
 
@@ -149,8 +238,16 @@ static double idn(int n, double *p) {
     return n;
 }
 
+static double nexp(int n, double *p) {
+    return p[2] + p[1]*(exp(p[0]*n-p[3]));
+}
+
+static double nexp2(int n, double *p) {
+    return p[2] + p[1]*(exp(p[0]*n*n-p[3]));
+}
+
 static double constant(int n, double *p) {
-    return p[0]?p[0]:1;
+    return p[0];
 }
 
 static double sqn(int n, double *p) {
@@ -172,10 +269,21 @@ static double inv(int n, double *p) {
     return p[1]*(1/((double)x+1));
 }
 
+static double pval(int n, double *p) {
+    int k;
+    if(n<p[0]) return 0;
+    if(p[8]&&(n>p[8])) return p[9];
+    for(k=0;k<8;k+=2) {
+        if(n>p[k] && n<=p[k+2])
+            return p[k+1];
+    }
+    return 0;
+}
+
 static double pchain(int n, double *p) {
     int len = p[0];
     int section = n/len + 1;
-    if((section+1) >= 20) return 0;
+    if((section+1) >= 10) return 0;
     double x = (double)(n%len)/(double)len;
     return p[section] + (p[section+1]-p[section])*x;
 }
@@ -193,11 +301,14 @@ static NFunc nfuncs[] = {
     {"lin",lin},
     {"poly",npoly},
     {"pchain",pchain},
+    {"pval",pval},
     {"sin",nsin},
     {"inv",inv},
     {"gauss",gauss},
     {"sq",sqn},
     {"ln",ln},
+    {"exp",nexp},
+    {"exp2",nexp2},
     {NULL,NULL}
 };
 
@@ -376,5 +487,13 @@ double av_genutil_avg(double *p, int len) {
         ret += p[k];
     }
     return ret/(double)len;
+}
+
+void av_genutil_replace_char(char *str, char needle, char rep) {
+    int k=0;
+    while(str[k]) {
+        if(str[k] == needle) str[k] = rep;
+        k++;
+    }
 }
 

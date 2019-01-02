@@ -8,5 +8,7 @@
 
 void av_plot_number(int x, int y, double z, int w, int h, int linesize, uint8_t *buf);
 void av_plot_form(int form, int x, int y, double a, int w, int h,int linesize, uint8_t *buf);
+void av_plot_form_p(int form, int x, int y, double a, int w, int h,int linesize, uint8_t *buf);
+void av_plot_number_p(int x, int y, double z, uint8_t *color, int w, int h, int linesize, uint8_t *buf);
 
 #endif
