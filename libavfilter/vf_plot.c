@@ -37,18 +37,21 @@
 #include <complex.h>
 #include <math.h>
 
-enum { Y, U, V, A };
 typedef struct PlotContext {
     const AVClass *class;
     const char *f;
+    const char *ff;
     double p[40];
-    double _p[40];
-    double (*nfunc[4])(int,double*);
-    double np[4][10];
-    double _np[4][10];
+    //double _p[40];
+    const char *nf[20];
+
+    double (*nfunc[20])(int,double*);
+    double np[20][NMAXPARAMS];
+    //double _np[4][10];
     const char *n[4];
-    int nmod[4]; // modulo n
-    void (*ffunc)(struct PlotContext*,int, AVFrame *in);
+    int nmod[20]; // modulo n
+    //void (*ffunc)(struct PlotContext*,int, AVFrame *in);
+    void (*ffunc)(GenutilFuncParams*,int,AVFrame *in);
     int w,h;
     double fx;
     double fy;
@@ -84,6 +87,7 @@ typedef struct PlotContext {
 
 static const AVOption plot_options[] = {
     { "f",  "f",   OFFSET(f),  AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "ff",  "ff",   OFFSET(ff),  AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "p00","p00",   OFFSET(p[0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p01","p01",   OFFSET(p[1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p02","p02",   OFFSET(p[2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -143,6 +147,17 @@ static const AVOption plot_options[] = {
     { "mf",  "mf",   OFFSET(mf),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "ofs","ofs",OFFSET(offset), AV_OPT_TYPE_INT,    {.i64=0},    0,     INT_MAX,        FLAGS },
     { "dbg","dbg",OFFSET(dbg), AV_OPT_TYPE_INT,    {.i64=0},    0,     1,        FLAGS },
+    { "nf0",  "nf0",   OFFSET(nf[0]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf1",  "nf1",   OFFSET(nf[1]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf2",  "nf2",   OFFSET(nf[2]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf3",  "nf3",   OFFSET(nf[3]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf4",  "nf4",   OFFSET(nf[4]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf5",  "nf5",   OFFSET(nf[5]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf6",  "nf6",   OFFSET(nf[6]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf7",  "nf7",   OFFSET(nf[7]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf8",  "nf8",   OFFSET(nf[8]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf9",  "nf9",   OFFSET(nf[9]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+
         { "n0",  "n0",   OFFSET(n[0]),     AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "nm0","nm0",   OFFSET(nmod[0]),  AV_OPT_TYPE_INT,    {.i64=0},    0,        INT_MAX,        FLAGS },
     { "n00","n00",   OFFSET(np[0][0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -209,34 +224,6 @@ static const AVOption plot_options[] = {
 
 AVFILTER_DEFINE_CLASS(plot);
 
-typedef struct FFunc {
-    const char *name;
-    void (*f)(PlotContext*, int,AVFrame *in);
-} FFunc;
-
-
-static void draw_number(int x, int y, double z, AVFrame *in, int packed) {
-    uint8_t color[] = {255,255,255,255};
-    if(packed) {
-        av_plot_number_p(x,y,z,color,in->width,in->height,in->linesize[0],in->data[0]);
-    } else {
-        av_plot_number(x,y,z,in->width,in->height,in->linesize[0],in->data[0]);
-    }
-}
-
-static void set_alpha(PlotContext *plot, AVFrame *in, double t, PFUNC(f), double a,double alpha,int ofsX, int ofsY) {
-    double complex _z = f(t,plot->_p);
-    double complex z = av_genutil_rotate(_z,alpha);
-    int x = floor(plot->fx*creal(z) + plot->w/2) + plot->x + ofsX;
-    int y = floor(plot->fy*cimag(z) + plot->h/2) + plot->y + ofsY;
-    if(plot->is_packed_rgb) {
-        av_plot_form_p(plot->form,x,y,a,plot->w,plot->h,in->linesize[0],in->data[0]+plot->rgba_map[A]);
-    } else {
-        av_plot_form(plot->form,x,y,a,plot->w,plot->h,in->linesize[3],in->data[3]);
-    }
-}
-
-
 static void black_yuv(PlotContext *plot,AVFrame *in) {
     int x,y;
     const int width = in->width;
@@ -262,305 +249,6 @@ static void black_yuv(PlotContext *plot,AVFrame *in) {
             }
         }
      }
-}
-
-static void circs(PlotContext *plot, int n, AVFrame *in) {
-    black_yuv(plot,in);
-    double count = plot->count;
-    double speed = plot->speed;
-    int k;
-    for(k=0;k<count;k++) {
-        double alpha = (k/count) * 2 * M_PI;
-        int ofsX = floor(cos(alpha) * plot->_p[0]);
-        int ofsY = floor(sin(alpha) * plot->_p[1]);
-        double start = 2*M_PI*k/count;
-        int j;
-        int layers = plot->layers;
-        for(j=0;j<layers;j++) {
-            double s = start + plot->length*j/layers;
-            double t = s + n*speed;
-            set_alpha(plot,in,t,av_genutil_circ,1,0,ofsX,ofsY);
-        }
-    }
-} 
-
-static void curve(PlotContext *plot, PFUNC(f),int n, AVFrame *in) {
-    black_yuv(plot,in);
-    double count = plot->count;
-    double speed = plot->speed;
-    int k;
-    for(k=0;k<count;k++) {
-        double alpha = (k/count) * 2 * M_PI;
-        int j;
-        double start = 0;
-        int layers = plot->layers;
-        for(j=0;j<layers;j++) {
-            double s = start + plot->length*j/layers;
-            double t = s + n*speed;
-            set_alpha(plot,in,t,f,1,alpha,0,0);
-        }
-    }
-}
-
-static void curve2(PlotContext *plot, PFUNC(f),int n, AVFrame *in) {
-    black_yuv(plot,in);
-    double count = plot->count;
-    double speed = plot->speed;
-    int k;
-    for(k=0;k<count;k++) {
-        double alpha = (k/count) * 2 * M_PI;
-        int j;
-        double start = 0;
-        int layers = plot->layers;
-        for(j=0;j<layers;j++) {
-            double s = start + plot->length*j/layers;
-            double t = s + n*speed;
-            set_alpha(plot,in,t,f,1,alpha,0,0);
-            set_alpha(plot,in,-t,f,1,alpha,0,0);
-        }
-    }
-}
-
-
-static void kardioids(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_kardio,n,in);
-}
-
-static void lemG(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_lemniskateG,n,in);
-}
-
-static void lemB(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_lemniskateB,n,in);
-}
-
-static void epi(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_epicycloid,n,in);
-}
-
-static void lissGP(PlotContext *plot, int n, AVFrame *in) {
-    black_yuv(plot,in);
-    double t = 0;
-    while(t<plot->length) {
-        int ofsX = plot->x;
-        int ofsY = plot->y;
-        set_alpha(plot,in,t,av_genutil_lissajousG,1,0,ofsX,ofsY);
-        t+=plot->speed;
-    }
-    if(plot->dbg) draw_number(plot->w-200, plot->h-15, plot->_p[1], in, plot->is_packed_rgb);
-}
-
-
-static void lissQP(PlotContext *plot, int n, AVFrame *in) {
-    black_yuv(plot,in);
-    double t = 0;
-    while(t<plot->length) {
-        int ofsX = plot->x;
-        int ofsY = plot->y;
-        set_alpha(plot,in,t,av_genutil_lissajousQ,1,0,ofsX,ofsY);
-        t+=plot->speed;
-    }
-    if(plot->dbg) draw_number(plot->w-200, plot->h-15, plot->_p[1], in, plot->is_packed_rgb);
-}
-
-static void lissP(PlotContext *plot, int n, AVFrame *in) {
-    black_yuv(plot,in);
-    double t = 0;
-    while(t<plot->length) {
-        int ofsX = 0;
-        int ofsY = 0;
-        set_alpha(plot,in,t,av_genutil_lissajous,1,0,ofsX,ofsY);
-        t+=plot->speed;
-    }
-    if(plot->dbg) draw_number(plot->w-200, plot->h-15, plot->_p[1], in, plot->is_packed_rgb);
-}
-
-static void liss(PlotContext *plot, int n, AVFrame *in) {
-    black_yuv(plot,in);
-    double count = plot->count;
-    double speed = plot->speed;
-    int k;
-    for(k=0;k<count;k++) {
-        double alpha = (k/count) * 2 * M_PI;
-        int ofsX = 0;
-        int ofsY = 0;
-        int j;
-        double start = 0;
-        int layers = plot->layers;
-        for(j=0;j<layers;j++) {
-            double s = start + plot->length*j/layers;
-            double t = s + n*speed;
-            set_alpha(plot,in,t,av_genutil_lissajous,1,alpha,ofsX,ofsY);
-        }
-    }
-}
-
-static void leg(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_legendre,n,in);
-}
-
-static void hypo(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_hypocycloid,n,in);
-}
-
-static void rhodo(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_rhodonea,n,in);
-    if(plot->dbg) {
-        draw_number(plot->w-100, plot->h-15, plot->_p[1], in, plot->is_packed_rgb);
-        draw_number(plot->w-200, plot->h-15, plot->_p[0], in, plot->is_packed_rgb);
-    }
-}
-
-static void nodal(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_nodal,n,in);
-    if(plot->dbg) draw_number(plot->w-100, plot->h-15, plot->_p[0], in, plot->is_packed_rgb);
-}
-
-static void talbot(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_talbot,n,in);
-    if(plot->dbg) draw_number(plot->w-100, plot->h-15, plot->_p[0], in, plot->is_packed_rgb);
-}
-
-static void folium(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_folium,n,in);
-    if(plot->dbg) draw_number(plot->w-100, plot->h-15, plot->_p[0], in, plot->is_packed_rgb);
-}
-
-static void gielis(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_gielis,n,in);
-    int k;
-    if(plot->dbg) {
-        for(k=1;k<5;k++) {
-            draw_number(plot->w-k*100, plot->h-15, plot->_p[k-1], in, plot->is_packed_rgb);
-        }
-    }
-}
-
-static void super_spiral(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_super_spiral,n,in);
-    int k;
-    if(plot->dbg) {
-        for(k=1;k<6;k++) {
-            draw_number(plot->w-k*100, plot->h-15, plot->_p[k-1], in, plot->is_packed_rgb);
-        }
-    }
-}
-
-static void super_rose(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_super_rose,n,in);
-    int k;
-    if(plot->dbg) {
-        for(k=1;k<6;k++) {
-            draw_number(plot->w-k*100, plot->h-15, plot->_p[k-1], in, plot->is_packed_rgb);
-        }
-    }
-}
-
-static void cbP(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_cb,n,in);
-}
-
-static void epi_spiral(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_epi_spiral,n,in);
-    int k;
-    if(plot->dbg) {
-        for(k=1;k<2;k++) {
-            draw_number(plot->w-k*100, plot->h-15, plot->_p[k-1], in, plot->is_packed_rgb);
-        }
-    }
-}
-
-static void spiral(PlotContext *plot, int n, AVFrame *in) {
-    curve2(plot,av_genutil_spiral,n,in);
-    int k;
-    if(plot->dbg) {
-        for(k=1;k<4;k++) {
-            draw_number(plot->w-k*100, plot->h-15, plot->_p[k-1], in, plot->is_packed_rgb);
-        }
-    }
-}
-
-static void atom_spiral(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_atom_spiral,n,in);
-    int k;
-    if(plot->dbg) {
-        for(k=1;k<2;k++) {
-            draw_number(plot->w-k*100, plot->h-15, plot->_p[k-1], in, plot->is_packed_rgb);
-        }
-    }
-}
-
-static void cotes_spiral(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_cotes_spiral,n,in);
-    int k;
-    if(plot->dbg) {
-        for(k=1;k<2;k++) {
-            draw_number(plot->w-k*100, plot->h-15, plot->_p[k-1], in, plot->is_packed_rgb);
-        }
-    }
-}
-
-static void sin_spiral(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_sin_spiral,n,in);
-    int k;
-    if(plot->dbg) {
-        for(k=1;k<2;k++) {
-            draw_number(plot->w-k*100, plot->h-15, plot->_p[k-1], in, plot->is_packed_rgb);
-        }
-    }
-}
-
-static void maclaurin(PlotContext *plot, int n, AVFrame *in) {
-    curve(plot,av_genutil_maclaurin,n,in);
-    int k;
-    if(plot->dbg) {
-        for(k=1;k<2;k++) {
-            draw_number(plot->w-k*100, plot->h-15, plot->_p[k-1], in, plot->is_packed_rgb);
-        }
-    }
-}
-
-static void zero(PlotContext *plot, int n, AVFrame *in) {
-}
-
-static FFunc ffuncs[] = {
-    {"circs",circs},
-    {"kardioids",kardioids},
-    {"lemG",lemG},
-    {"lemB",lemB},
-    {"epi",epi},
-    {"liss",liss},
-    {"lissP",lissP},
-    {"lissQP",lissQP},
-    {"lissGP",lissGP},
-    {"cbP",cbP},
-    {"leg",leg},
-    {"hypo",hypo},
-    {"nodal",nodal},
-    {"talbot",talbot},
-    {"folium",folium},
-    {"rhodo",rhodo},
-    {"gielis",gielis},
-    {"superspiral",super_spiral},
-    {"superrose",super_rose},
-    {"epispiral",epi_spiral},
-    {"spiral",spiral},
-    {"atomspiral",atom_spiral},
-    {"cotesspiral",cotes_spiral},
-    {"sinspiral",sin_spiral},
-    {"maclaurin",maclaurin},
-    {NULL,NULL}
-};
-
-static void (*get_func(const char *name))(PlotContext *, int, AVFrame *in) {
-    int k=0;
-    while(ffuncs[k].name) {
-        if(!strcmp(name, ffuncs[k].name)) {
-            return ffuncs[k].f;
-        }
-        k++;
-    }
-    return NULL;
 }
 
 
@@ -593,34 +281,56 @@ static av_cold int plot_init(AVFilterContext *ctx)
     PlotContext *plot = ctx->priv;
     av_log(ctx, AV_LOG_INFO, "form=%d ofs=%d x=%f y=%f xn=%f yn=%f, layers=%d speed=%f length=%f count=%d dim=%d\n", 
             plot->form, plot->offset, plot->x, plot->y, plot->xn, plot->yn, plot->layers, plot->speed, plot->length, plot->count, plot->dim);
+
     int k;
-    for(k=0;k<4;k++) {
-        if(plot->n[k]) {
+    
+    for(k=0;k<10;k++) {
+        if(plot->nf[k]) {
+            av_genutil_parse_nfunc(plot->nf[k],plot->np[k],&plot->nfunc[k]); 
+            if(!plot->nfunc[k]) {
+                av_log(ctx, AV_LOG_WARNING, "function for nf%d not found %s\n", k, plot->n[k]);
+            } else {
+                av_log(ctx, AV_LOG_INFO, "function for nf%d is [%s]", k, plot->nf[k]);
+                logParameters(ctx,plot->np[k],10);
+            }
+        }
+        if(k<4 && plot->n[k] && !plot->nfunc[k]) {
             plot->nfunc[k] = av_genutil_get_nfunc(plot->n[k]);
             if(!plot->nfunc[k]) {
-                av_log(ctx, AV_LOG_WARNING, "function for n%d not found %s\n", k, plot->n[k]);
+                av_log(ctx, AV_LOG_WARNING, "function for nf%d not found %s\n", k, plot->n[k]);
             } else {
                 av_log(ctx, AV_LOG_INFO, "function for n%d is %s", k, plot->n[k]);
                 logParameters(ctx,plot->np[k],10);
             }
-        } else {
-            av_log(ctx, AV_LOG_WARNING, "no function given for n%d\n",k);
         }
     }
 
-    if(plot->f) {
-        plot->ffunc = get_func(plot->f);
+    if(plot->ff) {
+        av_genutil_parse_ffunc(plot->ff,plot->p,&plot->ffunc); 
+        if(!plot->ffunc) {
+            av_log(ctx, AV_LOG_WARNING, "function for ff not found %s\n", plot->ff);
+        } else {
+            av_log(ctx, AV_LOG_INFO, "function for ff is [%s]", plot->ff);
+            logParameters(ctx,plot->p,40);
+        }
+    } 
+    if(plot->f && !plot->ffunc) {
+        plot->ffunc = av_genutil_get_ffunc(plot->f);
         if(!plot->ffunc) {
             av_log(ctx, AV_LOG_WARNING, "function for f not found %s\n", plot->f);
-            plot->ffunc = zero;
+            plot->ffunc = gzero;
         } else {
             av_log(ctx, AV_LOG_INFO, "function for f is %s\n", plot->f);
             logParameters(ctx,plot->p,40);
         }
     } else {
         av_log(ctx, AV_LOG_WARNING, "no function given for f\n");
-        plot->ffunc = zero;
     }
+    if(!plot->ffunc) {
+        plot->ffunc = gzero;
+    }
+
+
 
     plot->last = calloc(1920*1080,sizeof(uint8_t));
     init_last(plot);
@@ -718,58 +428,114 @@ static void copy0(PlotContext *plot, AVFrame *out) {
     }
 }
 
-static int modify(PlotContext *s, int frameNumber) {
-    int j,i;
+static void make_params(PlotContext *plot, GenutilFuncParams *params, int frame_number) {
+    int k,j;
+    for(k=0;k<40;k++) params->p[k] = plot->p[k];
+    params->length = plot->length;
+    params->w = plot->w;
+    params->h = plot->h;
+    params->fx = plot->fx;
+    params->fy = plot->fy;
+    params->x = plot->x;
+    params->y = plot->y;
+    params->rot = plot->rot;
+    params->form = plot->form;
+    params->speed = plot->speed;
+    params->count = plot->count;
+    params->layers = plot->layers;
+
+    for(k=0;k<4;k++) params->rgba_map[k]=plot->rgba_map[k];
+    params->is_packed_rgb = plot->is_packed_rgb;
+
+    double np[10][NMAXPARAMS];
+    for(k=0;k<10;k++) {
+        for(j=0;j<NMAXPARAMS;j++) {
+            np[k][j] = plot->np[k][j];
+        }
+    }
+
     const char *format = "%s %d %s %s %d";
-    i=0;
+    int i=0;
     for(j=0;j<10;j++) {
-        if(s->rf[j]) {
+        if(plot->rf[j]) {
             char input[40];
             char target[4];
             char src[4];
             char mode[4];
             int index,m;
-            strcpy(input, s->rf[j]);
+            strcpy(input, plot->rf[j]);
             sscanf(input, format, target, &index, mode, src, &m);
             double value;
             switch(src[0]) {
                 case 'n': {
-                    value = s->nfunc[m](s->nmod[m]?frameNumber%s->nmod[m]:frameNumber,s->_np[m]);
+                    value = plot->nfunc[m](plot->nmod[m]?frame_number%plot->nmod[m]:frame_number,np[m]);
                     break;
                 }                             
             }
             switch(target[0]) {
                 case 'p': {
-                    if(mode[0] == 'o') s->_p[index] = value;
-                    if(mode[0] == 'a') s->_p[index] = s->p[index] + value;
-                    if(mode[0] == 's') s->_p[index] = s->p[index] - value;
+                    if(mode[0] == 'o') params->p[index] = value;
+                    if(mode[0] == 'a') params->p[index] = plot->p[index] + value;
+                    if(mode[0] == 's') params->p[index] = plot->p[index] - value;
                     break;
                 }
                 case 'n': {
                     int f = index/10;
                     int i = index % 10;
-                    if(mode[0] == 'o') s->_np[f][i] = value;
-                    if(mode[0] == 'a') s->_np[f][i] = s->np[f][i] + value;
-                    if(mode[0] == 's') s->_np[f][i] = s->np[f][i] - value;
+                    if(mode[0] == 'o') np[f][i] = value;
+                    if(mode[0] == 'a') np[f][i] = plot->np[f][i] + value;
+                    if(mode[0] == 's') np[f][i] = plot->np[f][i] - value;
+                    break;
+                }
+                case 'x': {
+                    if(mode[0] == 'o') params->x = floor(value);
+                    if(mode[0] == 'a') params->x = floor(plot->x + value);
+                    if(mode[0] == 's') params->x = floor(plot->x - value);
+                    break;
+                }
+                case 'y': {
+                    if(mode[0] == 'o') params->y = floor(value);
+                    if(mode[0] == 'a') params->y = floor(plot->y + value);
+                    if(mode[0] == 's') params->y = floor(plot->y - value);
+                    break;
+                }
+                case 'w': {
+                    if(mode[0] == 'o') params->fx = floor(value);
+                    if(mode[0] == 'a') params->fx = floor(plot->fx + value);
+                    if(mode[0] == 's') params->fx = floor(plot->fx - value);
+                    break;
+                }
+                case 'h': {
+                    if(mode[0] == 'o') params->fy = floor(value);
+                    if(mode[0] == 'a') params->fy = floor(plot->fy + value);
+                    if(mode[0] == 's') params->fy = floor(plot->fy - value);
+                    break;
+                }
+                case 'r': {
+                    if(mode[0] == 'o') params->rot = value;
+                    if(mode[0] == 'a') params->rot = plot->rot + value;
+                    if(mode[0] == 's') params->rot = plot->rot - value;
+                    break;
+                }
+                case 'f': {
+                    if(mode[0] == 'o') if(value<9) params->form = floor(value);
+                    if(mode[0] == 'a') if(value<9) params->form = floor(plot->form + value);
+                    if(mode[0] == 's') if(value<9) params->form = floor(plot->form - value);
+                    break;
+                }
+                case 'l': {
+                    if(mode[0] == 'o') params->length = value;
+                    if(mode[0] == 'a') params->length = plot->length + value;
+                    if(mode[0] == 's') params->length = plot->length - value;
+                    break;
                 }
             }
         }
         i++;
     }
-    return 0;
+ 
 }
 
-static void copy_params(PlotContext *genvideo) {
-    int k,j;
-    for(k=0;k<40;k++) {
-        genvideo->_p[k] = genvideo->p[k];
-    }
-    for(k=0;k<4;k++) {
-        for(j=0;j<10;j++) {
-            genvideo->_np[k][j] = genvideo->np[k][j];
-        }
-    }
-}
 
 static int plot_filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
@@ -778,11 +544,13 @@ static int plot_filter_frame(AVFilterLink *inlink, AVFrame *in)
     PlotContext *plot = ctx->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
     av_frame_make_writable(in);
+    black_yuv(plot,in);
     double n = inlink->frame_count_out;
     dim(plot,in);
-    copy_params(plot);
-    modify(plot,inlink->frame_count_out);
-    plot->ffunc(plot, n, in);
+    GenutilFuncParams params;
+    make_params(plot,&params,n);
+    if(plot->dbg) debug(&params,n,in,plot->is_packed_rgb?-1:0);
+    plot->ffunc(&params, n, in);
     copy0(plot,in);
     return ff_filter_frame(outlink, in);
 }

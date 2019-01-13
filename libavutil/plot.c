@@ -178,6 +178,19 @@ void av_plot_number(int x, int y, double z, int w, int h, int linesize, uint8_t 
     }
 }
 
+void av_plot_int(int x, int y, int n, int w, int h, int linesize, uint8_t *buf) {
+    char s[50];
+    sprintf(s,"%d",n);
+    char *ptr = s;
+    int k = 0;
+    while(*ptr) {
+        av_plot_ch(*ptr,x+k,y,w,h,linesize,buf);
+        ptr++;
+        k+=9;
+    }
+}
+
+
 static void av_plot_ch_p(char ch, uint8_t *color, int x, int y, int w, int h, int linesize, uint8_t *buf) {
     uint8_t *bmp;
     if(ch == '.') {
@@ -211,6 +224,20 @@ void av_plot_number_p(int x, int y, double z, uint8_t *color, int w, int h, int 
         k+=9;
     }
 }
+
+void av_plot_int_p(int x, int y, int n, uint8_t *color, int w, int h, int linesize, uint8_t *buf) {
+    char s[50];
+    sprintf(s,"%d",n);
+    char *ptr = s;
+    int k = 0;
+    while(*ptr) {
+        av_plot_ch_p(*ptr,color,x+k,y,w,h,linesize,buf);
+        ptr++;
+        k+=9;
+    }
+}
+
+
 
 static void plot_form(PF(plotf),int form, int x, int y, double a, int w, int h,int linesize, uint8_t *buf) {
     switch(form) {

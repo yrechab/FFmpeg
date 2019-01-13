@@ -20,7 +20,7 @@
 
 /**
  * @file
- * Video generation based on a function plotcurveter
+ * Video generation based on drawing 2d curves
  */
 
 #include <float.h>
@@ -40,14 +40,18 @@
 typedef struct PlotCurveContext {
     const AVClass *class;
     const char *f;
-    void (*ffunc)(struct PlotCurveContext*,int,AVFrame *in);
+    const char *ff;
+    //void (*ffunc)(struct PlotCurveContext*,int,AVFrame *in);
+    void (*ffunc)(GenutilFuncParams*,int,AVFrame *in);
     double p[40];
-    double (*nfunc[4])(int,double*);
-    int nx[4];
-    double np[4][10];
+    const char *nf[20];
+    double (*nfunc[20])(int,double*);
+    double np[20][NMAXPARAMS];
     const char *n[4];
+    int nmod[20]; // modulo n
+    const char *cf[3];
     double (*cfunc[3])(double,double*);
-    double cp[3][10];
+    double cp[3][CMAXPARAMS];
     const char *c[3];
     int cmod; // YUV = 0, RGB = 1, HSV = 2
     double fx;
@@ -70,6 +74,8 @@ typedef struct PlotCurveContext {
     int bps;
     int dbg;
     int offset;
+    char *rf[20];
+
     AVFilterContext *ctx;
 } PlotCurveContext;
 
@@ -79,6 +85,7 @@ typedef struct PlotCurveContext {
 
 static const AVOption plotcurve_options[] = {
     { "f",  "f",   OFFSET(f),  AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "ff",  "ff",   OFFSET(ff),  AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "p00","p00",   OFFSET(p[0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p01","p01",   OFFSET(p[1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p02","p02",   OFFSET(p[2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -89,36 +96,6 @@ static const AVOption plotcurve_options[] = {
     { "p07","p07",   OFFSET(p[7]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p08","p08",   OFFSET(p[8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p09","p09",   OFFSET(p[9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p10","p10",   OFFSET(p[10]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p11","p11",   OFFSET(p[11]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p12","p12",   OFFSET(p[12]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p13","p13",   OFFSET(p[13]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p14","p14",   OFFSET(p[14]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p15","p15",   OFFSET(p[15]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p16","p16",   OFFSET(p[16]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p17","p17",   OFFSET(p[17]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p18","p18",   OFFSET(p[18]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p19","p19",   OFFSET(p[19]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p20","p20",   OFFSET(p[20]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p21","p21",   OFFSET(p[21]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p22","p22",   OFFSET(p[22]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p23","p23",   OFFSET(p[23]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p24","p24",   OFFSET(p[24]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p25","p25",   OFFSET(p[25]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p26","p26",   OFFSET(p[26]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p27","p27",   OFFSET(p[27]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p28","p28",   OFFSET(p[28]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p29","p29",   OFFSET(p[29]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p30","p30",   OFFSET(p[30]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p31","p31",   OFFSET(p[31]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p32","p32",   OFFSET(p[32]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p33","p33",   OFFSET(p[33]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p34","p34",   OFFSET(p[34]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p35","p35",   OFFSET(p[35]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p36","p36",   OFFSET(p[36]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p37","p37",   OFFSET(p[37]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p38","p38",   OFFSET(p[38]), AV_OPT_TYPE_DOUBLE, {.dbl =  1}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "p39","p39",   OFFSET(p[39]), AV_OPT_TYPE_DOUBLE, {.dbl =  1}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "fx","fx",       OFFSET(fx),     AV_OPT_TYPE_DOUBLE, {.dbl = 100}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "fy","fy",       OFFSET(fy),     AV_OPT_TYPE_DOUBLE, {.dbl = 100}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "x","x",       OFFSET(x),     AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -132,8 +109,18 @@ static const AVOption plotcurve_options[] = {
     { "start","s",   OFFSET(start), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, 0,  DBL_MAX,  FLAGS },
     { "rot","rot",   OFFSET(rot),   AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "rotn","rotn", OFFSET(rotn),  AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "nf0",  "nf0",   OFFSET(nf[0]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf1",  "nf1",   OFFSET(nf[1]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf2",  "nf2",   OFFSET(nf[2]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf3",  "nf3",   OFFSET(nf[3]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf4",  "nf4",   OFFSET(nf[4]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf5",  "nf5",   OFFSET(nf[5]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf6",  "nf6",   OFFSET(nf[6]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf7",  "nf7",   OFFSET(nf[7]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf8",  "nf8",   OFFSET(nf[8]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "nf9",  "nf9",   OFFSET(nf[9]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "n0",  "n0",   OFFSET(n[0]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "nx0","nx0",   OFFSET(nx[0]),   AV_OPT_TYPE_INT,    {.i64 =  0}, 0,  39,  FLAGS },
+    { "nm0","nm0",   OFFSET(nmod[0]),  AV_OPT_TYPE_INT,    {.i64=0},    0,        INT_MAX,        FLAGS },
     { "n00","n00",   OFFSET(np[0][0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n01","n01",   OFFSET(np[0][1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n02","n02",   OFFSET(np[0][2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -145,7 +132,7 @@ static const AVOption plotcurve_options[] = {
     { "n08","n08",   OFFSET(np[0][8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n09","n09",   OFFSET(np[0][9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n1",  "n1",   OFFSET(n[1]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "nx1","nx1",   OFFSET(nx[1]),   AV_OPT_TYPE_INT,    {.i64 =  1}, 0,  39,  FLAGS },
+    { "nm1","nm1",   OFFSET(nmod[1]),  AV_OPT_TYPE_INT,    {.i64=0},    0,        INT_MAX,        FLAGS },
     { "n10","n10",   OFFSET(np[1][0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n11","n11",   OFFSET(np[1][1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n12","n12",   OFFSET(np[1][2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -157,7 +144,7 @@ static const AVOption plotcurve_options[] = {
     { "n18","n18",   OFFSET(np[1][8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n19","n19",   OFFSET(np[1][9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n2",  "n2",  OFFSET(n[2]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "nx2","nx2",   OFFSET(nx[2]),   AV_OPT_TYPE_INT,    {.i64 =  2}, 0,  39,  FLAGS },
+    { "nm2","nm2",   OFFSET(nmod[2]),  AV_OPT_TYPE_INT,    {.i64=0},    0,        INT_MAX,        FLAGS },
     { "n20","n20",   OFFSET(np[2][0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n21","n21",   OFFSET(np[2][1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n22","n22",   OFFSET(np[2][2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -169,7 +156,7 @@ static const AVOption plotcurve_options[] = {
     { "n28","n28",   OFFSET(np[2][8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n29","n29",   OFFSET(np[2][9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n3",  "n3",   OFFSET(n[3]),      AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
-    { "nx3","nx3",   OFFSET(nx[3]),   AV_OPT_TYPE_INT,    {.i64 =  3}, 0,  39,  FLAGS },
+    { "nm3","nm3",   OFFSET(nmod[3]),  AV_OPT_TYPE_INT,    {.i64=0},    0,        INT_MAX,        FLAGS },
     { "n30","n30",   OFFSET(np[3][0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n31","n31",   OFFSET(np[3][1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n32","n32",   OFFSET(np[3][2]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -180,6 +167,9 @@ static const AVOption plotcurve_options[] = {
     { "n37","n37",   OFFSET(np[3][7]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n38","n38",   OFFSET(np[3][8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n39","n39",   OFFSET(np[3][9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "cf0",  "cf0",   OFFSET(cf[0]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "cf1",  "cf1",   OFFSET(cf[1]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "cf2",  "cf2",   OFFSET(cf[2]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "c0",  "c0",   OFFSET(c[0]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "c00","c00",   OFFSET(cp[0][0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "c01","c01",   OFFSET(cp[0][1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -217,203 +207,24 @@ static const AVOption plotcurve_options[] = {
     { "rgb","rgb",OFFSET(is_rgb), AV_OPT_TYPE_INT,    {.i64=0},    0,        1,        FLAGS },
     { "dbg","dbg",OFFSET(dbg), AV_OPT_TYPE_INT,    {.i64=0},    0,        1,        FLAGS },
     { "ofs","ofs",OFFSET(offset), AV_OPT_TYPE_INT,    {.i64=0},    0,     INT_MAX,        FLAGS },
+
+    { "r0", "r0",  OFFSET(rf[0]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r1", "r1",  OFFSET(rf[1]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r2", "r2",  OFFSET(rf[2]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r3", "r3",  OFFSET(rf[3]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r4", "r4",  OFFSET(rf[4]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r5", "r5",  OFFSET(rf[5]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r6", "r6",  OFFSET(rf[6]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r7", "r7",  OFFSET(rf[7]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r8", "r8",  OFFSET(rf[8]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "r9", "r9",  OFFSET(rf[9]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+
+
+
     {NULL},
 };
 
 AVFILTER_DEFINE_CLASS(plotcurve);
-
-typedef struct FFunc {
-    const char *name;
-    void (*f)(PlotCurveContext*, int,AVFrame *in);
-} FFunc;
-
-static void drawNumber(int x, int y, double z, AVFrame *in) {
-    av_plot_number(x,y,z,in->width,in->height,in->linesize[0],in->data[0]);
-}
-
-static void drawPoint(PlotCurveContext *plotcurve, AVFrame *in, int plane, double t, PFUNC(f), double a) {
-    double complex _z = f(t,plotcurve->p);
-    double complex z = av_genutil_rotate(_z,plotcurve->rot);
-    int _x = floor(plotcurve->fx*creal(z) + plotcurve->w/2) + plotcurve->x;
-    int _y = floor(plotcurve->fy*cimag(z) + plotcurve->h/2) + plotcurve->y;
-    int x,y,w,h;
-    if((plane==1 || plane==2)&&(plotcurve->is_rgb==0)) {
-        w = AV_CEIL_RSHIFT(plotcurve->w, plotcurve->hsub);
-        x = AV_CEIL_RSHIFT(_x, plotcurve->hsub);
-        h = AV_CEIL_RSHIFT(plotcurve->h, plotcurve->vsub);
-        y = AV_CEIL_RSHIFT(_y, plotcurve->vsub);
-    } else {
-        x=_x;y=_y;w=plotcurve->w;h=plotcurve->h;
-    }
-    av_plot_form(plotcurve->form,x,y,a,w,h,in->linesize[plane],in->data[plane]);
-}
-
-static void blackYUV(PlotCurveContext *plotcurve, AVFrame *in) {
-    int plane,x,y;
-    const int width = AV_CEIL_RSHIFT(in->width, plotcurve->hsub);
-    const int height = AV_CEIL_RSHIFT(in->height, plotcurve->vsub);
-    uint8_t *ptr;
-    for(plane=1;plane<=2;plane++) {
-        if(in->data[plane]) {
-            for (y = 0; y < height; y++) {
-                ptr = in->data[plane] + in->linesize[plane] * y;
-                for (x = 0; x < width; x++) {
-                    ptr[x] = 128;
-                }
-            }
-        }
-    }
-}
-
-
-static void curve(PlotCurveContext *plotcurve, PFUNC(f),int n, AVFrame *in) {
-    blackYUV(plotcurve,in);
-    double t = plotcurve->start;
-    int k;
-    for(k=0;k<4;k++) {
-        if(plotcurve->nfunc[k]) {
-            plotcurve->p[plotcurve->nx[k]] = plotcurve->nfunc[k](n,plotcurve->np[k]);
-            if(plotcurve->dbg) drawNumber(plotcurve->w-k*100-100, plotcurve->h-35, plotcurve->p[plotcurve->nx[k]], in);
-        }
-    }
-    while(t<plotcurve->start+plotcurve->length) {
-        double colors[3];
-        av_genutil_get_color(plotcurve->cfunc, plotcurve->cp,t,plotcurve->cmod, plotcurve->is_rgb, colors);
-        drawPoint(plotcurve,in,0,t,f,colors[0]);
-        drawPoint(plotcurve,in,1,t,f,colors[1]);
-        drawPoint(plotcurve,in,2,t,f,colors[2]);
-        t+=plotcurve->delta;
-    }
-}
-
-static void curve2(PlotCurveContext *plotcurve, PFUNC(f),int n, AVFrame *in) {
-    blackYUV(plotcurve,in);
-    double t = plotcurve->start;
-    int k;
-    for(k=0;k<4;k++) {
-        if(plotcurve->nfunc[k]) {
-            plotcurve->p[plotcurve->nx[k]] = plotcurve->nfunc[k](n,plotcurve->np[k]);
-            if(plotcurve->dbg) drawNumber(plotcurve->w-k*100-100, plotcurve->h-35, plotcurve->p[plotcurve->nx[k]], in);
-        }
-    }
-    while(t<plotcurve->start+plotcurve->length) {
-        double colors[3];
-        av_genutil_get_color(plotcurve->cfunc, plotcurve->cp,t,plotcurve->cmod, plotcurve->is_rgb, colors);
-        drawPoint(plotcurve,in,0,t,f,colors[0]);
-        drawPoint(plotcurve,in,1,t,f,colors[1]);
-        drawPoint(plotcurve,in,2,t,f,colors[2]);
-
-        drawPoint(plotcurve,in,0,-t,f,colors[0]);
-        drawPoint(plotcurve,in,1,-t,f,colors[1]);
-        drawPoint(plotcurve,in,2,-t,f,colors[2]);
-
-        t+=plotcurve->delta;
-    }
-}
-
-static void lissG(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_lissajousG,n,in);
-}
-
-static void lissQ(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_lissajousQ,n,in);
-}
-
-static void liss(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_lissajous,n,in);
-}
-
-static void leg(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_legendre,n,in);
-}
-
-static void hypo(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_hypocycloid,n,in);
-}
-
-static void cbP(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_cb,n,in);
-}
-
-static void sinoid(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_sinusoid,n,in);
-}
-
-static void capri(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_capricornoid,n,in);
-}
-
-static void scara(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_scarabaeus,n,in);
-}
-
-static void tro(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_trochoid,n,in);
-}
-
-static void circ(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_circoid,n,in);
-}
-
-static void rhodo(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_rhodonea,n,in);
-}
-
-static void super_rose(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_super_rose,n,in);
-}
-
-static void super_spiral(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_super_rose,n,in);
-}
-
-static void epi_spiral(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_epi_spiral,n,in);
-}
-
-static void spiral(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve2(plotcurve,av_genutil_spiral,n,in);
-}
-
-static void maclaurin(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-    curve(plotcurve,av_genutil_maclaurin,n,in);
-}
-
-static void zero(PlotCurveContext *plotcurve, int n, AVFrame *in) {
-}
-
-static FFunc ffuncs[] = {
-    {"liss",liss},
-    {"lissQ",lissQ},
-    {"lissG",lissG},
-    {"cbP",cbP},
-    {"leg",leg},
-    {"hypo",hypo},
-    {"sinoid",sinoid},
-    {"capri",capri},
-    {"circ",circ},
-    {"scara",scara},
-    {"tro",tro},
-    {"rhodo",rhodo},
-    {"superrose",super_rose},
-    {"epispiral",epi_spiral},
-    {"superspiral",super_spiral},
-    {"spiral",spiral},
-    {"maclaurin",maclaurin},
-    {NULL,NULL}
-};
-
-static void (*getFunc(const char *name))(PlotCurveContext*, int, AVFrame*) {
-    int k=0;
-    while(ffuncs[k].name) {
-        if(!strcmp(name, ffuncs[k].name)) {
-            return ffuncs[k].f;
-        }
-        k++;
-    }
-    return NULL;
-}
-
 
 /* ================================== FILTER ========================================== */
 
@@ -433,51 +244,75 @@ static av_cold int plotcurve_init(AVFilterContext *ctx)
             plotcurve->is_rgb, plotcurve->offset, plotcurve->x, plotcurve->y, plotcurve->xn, plotcurve->yn, 
             plotcurve->delta, plotcurve->start, plotcurve->length, plotcurve->fx,plotcurve->fy,plotcurve->dbg);
     int k;
-    for(k=0;k<4;k++) {
-        if(plotcurve->n[k]) {
+    for(k=0;k<10;k++) {
+        if(plotcurve->nf[k]) {
+            av_genutil_parse_nfunc(plotcurve->nf[k],plotcurve->np[k],&plotcurve->nfunc[k]); 
+            if(!plotcurve->nfunc[k]) {
+                av_log(ctx, AV_LOG_WARNING, "function for nf%d not found %s\n", k, plotcurve->n[k]);
+            } else {
+                av_log(ctx, AV_LOG_INFO, "function for nf%d is [%s]", k, plotcurve->nf[k]);
+                logParameters(ctx,plotcurve->np[k],10);
+            }
+        }
+        if(k<4 && plotcurve->n[k] && !plotcurve->nfunc[k]) {
             plotcurve->nfunc[k] = av_genutil_get_nfunc(plotcurve->n[k]);
             if(!plotcurve->nfunc[k]) {
                 av_log(ctx, AV_LOG_WARNING, "function for nf%d not found %s\n", k, plotcurve->n[k]);
             } else {
-                av_log(ctx, AV_LOG_INFO, "function for nf%d is %s", k, plotcurve->n[k]);
+                av_log(ctx, AV_LOG_INFO, "function for n%d is %s", k, plotcurve->n[k]);
                 logParameters(ctx,plotcurve->np[k],10);
             }
-        } else {
-            av_log(ctx, AV_LOG_WARNING, "no function given for n\n");
         }
     }
 
     for(k=0;k<3;k++) {
-        if(plotcurve->c[k]) {
-            plotcurve->cfunc[k] = av_genutil_get_cfunc(plotcurve->c[k]);
+        if(plotcurve->cf[k]) {
+            av_genutil_parse_cfunc(plotcurve->cf[k],plotcurve->cp[k],&plotcurve->cfunc[k]); 
             if(!plotcurve->cfunc[k]) {
-                av_log(ctx, AV_LOG_WARNING, "function for cf%d not found %s\n", k, plotcurve->c[k]);
-                plotcurve->cfunc[k] = czero;
+                av_log(ctx, AV_LOG_WARNING, "function for cf%d not found %s\n", k, plotcurve->cf[k]);
             } else {
-                av_log(ctx, AV_LOG_INFO, "function for cf%d is %s", k, plotcurve->c[k]);
+                av_log(ctx, AV_LOG_INFO, "function for cf%d is [%s]", k, plotcurve->cf[k]);
                 logParameters(ctx,plotcurve->cp[k],10);
             }
-        } else {
-            av_log(ctx, AV_LOG_WARNING, "no function given for n\n");
-            plotcurve->cfunc[k] = czero;
-        }
+        } 
+
+        if(plotcurve->c[k] && !plotcurve->cfunc[k]) {
+            plotcurve->cfunc[k] = av_genutil_get_cfunc(plotcurve->c[k]);
+            if(!plotcurve->cfunc[k]) {
+                av_log(ctx, AV_LOG_WARNING, "function for c%d not found %s\n", k, plotcurve->c[k]);
+                plotcurve->cfunc[k] = czero;
+            } else {
+                av_log(ctx, AV_LOG_INFO, "function for c%d is %s", k, plotcurve->c[k]);
+                logParameters(ctx,plotcurve->cp[k],10);
+            }
+        } 
     }
+    
 
-
-    if(plotcurve->f) {
-        plotcurve->ffunc = getFunc(plotcurve->f);
+    if(plotcurve->ff) {
+        av_genutil_parse_ffunc(plotcurve->ff,plotcurve->p,&plotcurve->ffunc); 
+        if(!plotcurve->ffunc) {
+            av_log(ctx, AV_LOG_WARNING, "function for ff not found %s\n", plotcurve->ff);
+        } else {
+            av_log(ctx, AV_LOG_INFO, "function for ff is [%s]", plotcurve->ff);
+            logParameters(ctx,plotcurve->p,40);
+        }
+    } 
+    if(plotcurve->f && !plotcurve->ffunc) {
+        plotcurve->ffunc = av_genutil_get_ffunc(plotcurve->f);
         if(!plotcurve->ffunc) {
             av_log(ctx, AV_LOG_WARNING, "function for f not found %s\n", plotcurve->f);
-            plotcurve->ffunc = zero;
+            plotcurve->ffunc = gzero;
         } else {
             av_log(ctx, AV_LOG_INFO, "function for f is %s\n", plotcurve->f);
             logParameters(ctx,plotcurve->p,40);
         }
     } else {
         av_log(ctx, AV_LOG_WARNING, "no function given for f\n");
-        plotcurve->ffunc = zero;
     }
-
+    if(!plotcurve->ffunc) {
+        plotcurve->ffunc = gzero;
+    }
     return 0;
 }
 
@@ -540,15 +375,147 @@ static int plotcurve_config_props(AVFilterLink *inlink)
     return 0;
 }
 
-typedef struct ThreadData {
-    int height;
-    int width;
-    int linesize;
-    int n;
-    AVFrame *in;
-} ThreadData;
+static void make_params(PlotCurveContext *plotcurve, GenutilFuncParams *params, int frame_number) {
+    int k,j;
+    for(k=0;k<40;k++) params->p[k] = plotcurve->p[k];
+    for(k=0;k<3;k++) params->cfunc[k] = plotcurve->cfunc[k];
+    for(k=0;k<3;k++) {
+        for(j=0;j<CMAXPARAMS;j++) params->cp[k][j] = plotcurve->cp[k][j];
+    }
+    params->cmod = plotcurve->cmod;
+    params->delta = plotcurve->delta;
+    params->start = plotcurve->start;
+    params->length = plotcurve->length;
+    params->w = plotcurve->w;
+    params->h = plotcurve->h;
+    params->is_rgb = plotcurve->is_rgb;
+    params->fx = plotcurve->fx;
+    params->fy = plotcurve->fy;
+    params->x = plotcurve->x;
+    params->y = plotcurve->y;
+    params->rot = plotcurve->rot;
+    params->form = plotcurve->form;
 
+    double np[10][NMAXPARAMS];
+    for(k=0;k<10;k++) {
+        for(j=0;j<NMAXPARAMS;j++) {
+            np[k][j] = plotcurve->np[k][j];
+        }
+    }
 
+    const char *format = "%s %d %s %s %d";
+    int i=0;
+    for(j=0;j<10;j++) {
+        if(plotcurve->rf[j]) {
+            char input[40];
+            char target[4];
+            char src[4];
+            char mode[4];
+            int index,m;
+            strcpy(input, plotcurve->rf[j]);
+            sscanf(input, format, target, &index, mode, src, &m);
+            double value;
+            switch(src[0]) {
+                case 'n': {
+                    value = plotcurve->nfunc[m](plotcurve->nmod[m]?frame_number%plotcurve->nmod[m]:frame_number,np[m]);
+                    break;
+                }                             
+            }
+            switch(target[0]) {
+                case 'p': {
+                    if(mode[0] == 'o') params->p[index] = value;
+                    if(mode[0] == 'a') params->p[index] = plotcurve->p[index] + value;
+                    if(mode[0] == 's') params->p[index] = plotcurve->p[index] - value;
+                    break;
+                }
+                case 'n': {
+                    int f = index/10;
+                    int i = index % 10;
+                    if(mode[0] == 'o') np[f][i] = value;
+                    if(mode[0] == 'a') np[f][i] = plotcurve->np[f][i] + value;
+                    if(mode[0] == 's') np[f][i] = plotcurve->np[f][i] - value;
+                    break;
+                }
+                case 'c': {
+                    int f = index/10;
+                    int i = index % 10;
+                    if(mode[0] == 'o') params->cp[f][i] = value;
+                    if(mode[0] == 'a') params->cp[f][i] = plotcurve->cp[f][i] + value;
+                    if(mode[0] == 's') params->cp[f][i] = plotcurve->cp[f][i] - value;
+                    break;
+                }
+                case 'x': {
+                    if(mode[0] == 'o') params->x = floor(value);
+                    if(mode[0] == 'a') params->x = floor(plotcurve->x + value);
+                    if(mode[0] == 's') params->x = floor(plotcurve->x - value);
+                    break;
+                }
+                case 'y': {
+                    if(mode[0] == 'o') params->y = floor(value);
+                    if(mode[0] == 'a') params->y = floor(plotcurve->y + value);
+                    if(mode[0] == 's') params->y = floor(plotcurve->y - value);
+                    break;
+                }
+                case 'w': {
+                    if(mode[0] == 'o') params->fx = floor(value);
+                    if(mode[0] == 'a') params->fx = floor(plotcurve->fx + value);
+                    if(mode[0] == 's') params->fx = floor(plotcurve->fx - value);
+                    break;
+                }
+                case 'h': {
+                    if(mode[0] == 'o') params->fy = floor(value);
+                    if(mode[0] == 'a') params->fy = floor(plotcurve->fy + value);
+                    if(mode[0] == 's') params->fy = floor(plotcurve->fy - value);
+                    break;
+                }
+                case 'r': {
+                    if(mode[0] == 'o') params->rot = value;
+                    if(mode[0] == 'a') params->rot = plotcurve->rot + value;
+                    if(mode[0] == 's') params->rot = plotcurve->rot - value;
+                    break;
+                }
+                case 'f': {
+                    if(mode[0] == 'o') if(value<9) params->form = floor(value);
+                    if(mode[0] == 'a') if(value<9) params->form = floor(plotcurve->form + value);
+                    if(mode[0] == 's') if(value<9) params->form = floor(plotcurve->form - value);
+                    break;
+                }
+                case 'l': {
+                    if(mode[0] == 'o') params->length = value;
+                    if(mode[0] == 'a') params->length = plotcurve->length + value;
+                    if(mode[0] == 's') params->length = plotcurve->length - value;
+                    break;
+                }
+                case 's': {
+                    if(mode[0] == 'o') params->start = value;
+                    if(mode[0] == 'a') params->start = plotcurve->start + value;
+                    if(mode[0] == 's') params->start = plotcurve->start - value;
+                    break;
+                }
+            }
+        }
+        i++;
+    }
+ 
+}
+static void black_yuv(PlotCurveContext *plotcurve, AVFrame *in) {
+    int plane,x,y;
+    //const int width = AV_CEIL_RSHIFT(in->width, plotcurve->hsub);
+    //const int height = AV_CEIL_RSHIFT(in->height, plotcurve->vsub);
+    const int width = in->width;
+    const int height = in->height;
+    uint8_t *ptr;
+    for(plane=1;plane<=2;plane++) {
+        if(in->data[plane]) {
+            for (y = 0; y < height; y++) {
+                ptr = in->data[plane] + in->linesize[plane] * y;
+                for (x = 0; x < width; x++) {
+                    ptr[x] = 128;
+                }
+            }
+        }
+    }
+}
 
 static int plotcurve_filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
@@ -556,8 +523,12 @@ static int plotcurve_filter_frame(AVFilterLink *inlink, AVFrame *in)
     PlotCurveContext *plotcurve = ctx->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
     av_frame_make_writable(in);
+    black_yuv(plotcurve,in);
     double n = inlink->frame_count_out;
-    plotcurve->ffunc(plotcurve,n+plotcurve->offset,in);
+    GenutilFuncParams params;
+    make_params(plotcurve,&params,n);
+    if(plotcurve->dbg) debug(&params,n,in,0);
+    plotcurve->ffunc(&params,n+plotcurve->offset,in);
     return ff_filter_frame(outlink, in);
 }
 

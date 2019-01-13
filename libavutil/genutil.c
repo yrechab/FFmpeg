@@ -1,21 +1,100 @@
 #include "genutil.h"
+#include "plot.h"
+#include <string.h>
+#include "libavutil/avstring.h"
 
-
-
-typedef struct NFunc {
-    const char *name;
-    double (*f)(int n, double *p);
-} NFunc;
 
 typedef struct CFunc {
     const char *name;
     double (*f)(double t, double *p);
 } CFunc;
 
+#define P2C(r,t) r*cos(t)+I*r*sin(t)
+
 double complex av_genutil_rotate(double complex z, double phi) {
     return phi!=0.0?(cos(phi) + sin(phi)*I) * z:z;
 }
 
+static double complex av_genutil_line_p(double t, double x0, double y0, double x1, double y1,double *next) {
+    int steep = fabs(y1 - y0) > fabs(x1 - x0);
+    double tmp;
+    if (steep) {
+        tmp = x0;
+        x0 = y0;
+        y0 = tmp;
+        tmp = x1;
+        x1 = y1;
+        y1 = tmp;
+    }
+    double dx = fabs(x1 - x0);
+    double dy = y1 - y0;
+    double gradient = dy / dx;
+    double x,y;
+
+    if(x0>x1) {
+        if(x0-t<=x1) {
+            y = y0 + fmod(t,dx) * gradient;
+            x = x0 - fmod(t,dx);;
+            *next = x0-x1;
+        } else {
+            y = y0 + t * gradient;
+            x = x0 - t;
+            *next = 0;
+        }
+     } else {
+        if(x0+t>=x1) {
+            y = y0 + fmod(t,dx) * gradient;
+            x = x0 + fmod(t,dx);
+            *next = x1-x0;
+        } else {
+            y = y0 + t * gradient;
+            x = x0 + t;
+            *next = 0;
+        }
+    }
+    if(steep) {
+        return y + I * x;
+    } else {
+        return x + I * y;
+    }
+}
+
+static double line_length(double x0,double y0,double x1,double y1) {
+    if(fabs(y1 - y0) > fabs(x1 - x0)) return fabs(y1-y0);
+    return fabs(x1-x0);
+}
+
+static double poly_length(double *p) {
+    int k;
+    int len = floor(p[0]);
+    double ret = 0;
+    for(k=0;k<len*2;k+=2) {
+        ret += line_length(p[k+1],p[k+2],p[k+3],p[k+4]);
+    }
+    return ret;
+}
+
+double complex av_genutil_poly(double t, double *p) {
+    int len = floor(p[0]);
+    int k;
+    double next;
+    double complex ret;
+    double length = poly_length(p);
+    double _t = fmod(t,length);
+    //double _t = t;
+    for(k=0;k<len*2;k+=2) {
+        ret = av_genutil_line_p(_t,p[k+1],p[k+2],p[k+3],p[k+4],&next);
+        if(next == 0) break;
+        _t-=next;
+    }
+    return ret;
+}
+
+double complex av_genutil_line(double t, double *p) {
+    double dummy;
+    double complex ret = av_genutil_line_p(t,p[0],p[1],p[2],p[3],&dummy);
+    return ret;
+}
 double complex av_genutil_circ(double t,  double *p) {
     return p[0] * cos(t) + I * p[1] * sin(t);
 }
@@ -99,6 +178,20 @@ double complex av_genutil_trochoid(double t, double *p) {
     return x + I * y;
 }
 
+double complex av_genutil_addoid(double t, double *p) {
+    double r1 = p[0];
+    double r2 = p[1];
+    double r3 = p[2];
+    double r4 = p[3];
+    double o1 = p[4];
+    double o2 = p[5];
+    double o3 = p[6];
+    double o4 = p[7];
+    double x = r1*cos(o1*t) + r2*cos(o2*t); 
+    double y = r3*sin(o3*t) + r4*sin(o4*t); 
+    return x + I * y;
+}
+
 
 static double poly3(double a,double b,double x) {
     return a*x*x*x + b*x;
@@ -113,8 +206,9 @@ double complex av_genutil_legendre(double t, double *p) {
 double complex av_genutil_hypocycloid(double t, double *p) {
     double a = p[1];
     double b = p[2];
-    double x = p[0]*((1-a)*cos(a*t)+a*b*cos((1-a)*t));
-    double y = p[0]*((1-a)*sin(a*t)-a*b*sin((1-a)*t));
+    double c = p[3];
+    double x = p[0]*((1-c)*cos(a*t)+a*b*cos((1-a)*t));
+    double y = p[0]*((1-c)*sin(a*t)-a*b*sin((1-a)*t));
     return x + I * y;
 }
 
@@ -164,7 +258,7 @@ double complex av_genutil_talbot(double t, double *p) {
 double complex av_genutil_folium(double t, double *p) {
     double a = p[0];
     double r = (sin(t)*sin(t)-a)*cos(t);
-    return r*cos(t) + I * r*sin(t);
+    return P2C(r,t);
 }
 
 static double super(double t, double a, double b, double c, double d) {
@@ -173,22 +267,22 @@ static double super(double t, double a, double b, double c, double d) {
 
 double complex av_genutil_gielis(double t, double *p) {
     double r = super(t,p[0],p[1],p[2],p[3]);
-    return r*cos(t) + I * r*sin(t);
+    return P2C(r,t);
 }
 
 double complex av_genutil_super_spiral(double t, double *p) {
     double r = exp(p[4]*t) * super(t,p[0],p[1],p[2],p[3]);
-    return r*cos(t) + I * r * sin(t);
+    return P2C(r,t);
 }
 
 double complex av_genutil_super_rose(double t, double *p) {
     double r = sin(p[4]*t) * super(t,p[0],p[1],p[2],p[3]);
-    return r*cos(t) + I * r * sin(t);
+    return P2C(r,t);
 }
 
 double complex av_genutil_epi_spiral(double t, double *p) {
     double r = 1/cos(p[0]*t);
-    return r*cos(t) + I * r * sin(t);
+    return P2C(r,t);
 }
 
 double complex av_genutil_spiral(double t, double *p) {
@@ -197,30 +291,45 @@ double complex av_genutil_spiral(double t, double *p) {
     if(phi<0) {
         r = -pow(-phi,p[1]);
         return r*cos(t) - I * r * sin(t);
-        //return -r*sin(t) - I * r * cos(t);
     }
     r = pow(phi, p[1]);
-    return r*cos(t) + I * r * sin(t);
+    return P2C(r,t);
 }
 
 double complex av_genutil_atom_spiral(double t, double *p) {
     double r = t/(t-p[0]);
-    return r*cos(t) + I * r * sin(t);
+    return P2C(r,t);
 }
 
 double complex av_genutil_cotes_spiral(double t, double *p) {
     double r = t/cosh(t*p[0]);
-    return r*cos(t) + I * r * sin(t);
+    return P2C(r,t);
 }
 
 double complex av_genutil_sin_spiral(double t, double *p) {
     double r = pow(sin(p[0]*t),p[0]);
-    return r*cos(t) + I * r * sin(t);
+    return P2C(r,t);
 }
 
 double complex av_genutil_maclaurin(double t, double *p) {
     double r = sin(p[0]*t+p[1])/sin(p[2]*t+p[3]);
-    return r*cos(t) + I * r * sin(t);
+    return P2C(r,t);
+}
+
+double complex av_genutil_harmonic(double t, double *p) {
+    double a = p[0];
+    double b = p[1];
+    double r = (1+a*cos(b*t));
+    return P2C(r,t);
+}
+
+double complex av_genutil_cornoid(double t, double *p) {
+    double a = p[0];
+    double b = p[1];
+    double c = p[2];
+    double x = cos(a*t)*cos(t);
+    double y = (c+cos(b*t))*sin(t);
+    return x + I * y;
 }
 
 /* ============================= NFUNCS *******************************************/
@@ -272,8 +381,9 @@ static double inv(int n, double *p) {
 static double pval(int n, double *p) {
     int k;
     if(n<p[0]) return 0;
-    if(p[8]&&(n>p[8])) return p[9];
-    for(k=0;k<8;k+=2) {
+    if(p[NMAXPARAMS-2]&&(n>p[NMAXPARAMS-2])) return p[NMAXPARAMS-1];
+    for(k=0;k<NMAXPARAMS-2;k+=2) {
+        if(k>0 && p[k]==0) return p[k-1]; 
         if(n>p[k] && n<=p[k+2])
             return p[k+1];
     }
@@ -283,7 +393,7 @@ static double pval(int n, double *p) {
 static double pchain(int n, double *p) {
     int len = p[0];
     int section = n/len + 1;
-    if((section+1) >= 10) return 0;
+    if(section > NMAXPARAMS) return 0;
     double x = (double)(n%len)/(double)len;
     return p[section] + (p[section+1]-p[section])*x;
 }
@@ -294,6 +404,11 @@ static double gauss(int n, double *p) {
     double x = (double)n*p[0];
     return m * exp(-fac * pow(x-p[3],2)); 
 }
+
+typedef struct NFunc {
+    const char *name;
+    double (*f)(int n, double *p);
+} NFunc;
 
 static NFunc nfuncs[] = {
     {"idn",idn},
@@ -323,14 +438,32 @@ double (*av_genutil_get_nfunc(const char *name))(int,double*) {
     return NULL;
 }
 
+void av_genutil_parse_nfunc(const char *nf, double *p, double (**f)(int,double*)) {
+    char *saveptr,*token;
+    char *str = strdup(nf);
+    int j;
+    for (j = 0; ; j++, str = NULL) {
+        token = av_strtok(str, " |", &saveptr);
+        if (token == NULL)
+            break;
+        if(j==0) {
+            *f = av_genutil_get_nfunc(token);
+        } else {
+            p[j-1] = atof(token);
+        }
+    }
+    free(str);
+}
+
+
 /* ============================= CFUNCS *******************************************/
 
 static double cfsin(double t, double *p) {
-    return (sin(p[0]*t)+1)*0.5*p[1]+p[2]; 
+    return (sin(p[0]*t+p[3])+1)*0.5*p[1]+p[2]; 
 }
 
 static double cfcos(double t, double *p) {
-    return (cos(p[0]*t)+1)*0.5*p[1]+p[2]; 
+    return (cos(p[0]*t+p[3])+1)*0.5*p[1]+p[2]; 
 }
 
 static double cconstant(double t, double *p) {
@@ -340,7 +473,7 @@ static double cconstant(double t, double *p) {
 static double cpchain(double t, double *p) {
     int len = p[0];
     int section = t/len + 1;
-    if((section+1) >= 10) return 0;
+    if(section > CMAXPARAMS) return 0;
     double x = (double)(t-section*len)/(double)len;
     return p[section] + (p[section+1]-p[section])*x;
 }
@@ -367,6 +500,25 @@ double (*av_genutil_get_cfunc(const char *name))(double,double*) {
     }
     return NULL;
 }
+
+void av_genutil_parse_cfunc(const char *nf, double *p, double (**f)(double,double*)) {
+    char *saveptr,*token;
+    char *str = strdup(nf);
+    int j;
+    for (j = 0; ; j++, str = NULL) {
+        token = av_strtok(str, " |", &saveptr);
+        if (token == NULL)
+            break;
+        if(j==0) {
+            *f = av_genutil_get_cfunc(token);
+        } else {
+            p[j-1] = atof(token);
+        }
+    }
+    free(str);
+}
+
+
 
 static void get_hsv2rgb_params(double phi, double S, double V, uint8_t *h, double *p, double *q, double *t) {
     double H = phi<0?((180/M_PI)*phi)+360:(180/M_PI)*phi;
@@ -477,6 +629,666 @@ void av_genutil_get_color(double (*cfunc[3])(double,double*), double cp[3][10], 
 
                 
     }
+}
+
+/******************** UTIL ****************************/
+static void draw_number(int x, int y, double z, AVFrame *in, int plane) {
+    if(plane == -1) { // packed rgb
+        uint8_t color[] = {255,255,255,255};
+        av_plot_number_p(x,y,z,color,in->width,in->height,in->linesize[0],in->data[0]);
+    } else {
+        av_plot_number(x,y,z,in->width,in->height,in->linesize[plane],in->data[plane]);
+    }
+}
+
+static void draw_int(int x, int y, int n, AVFrame *in,int plane) {
+    if(plane == -1) { // packed rgb
+        uint8_t color[] = {255,255,255,255};
+        av_plot_int_p(x,y,n,color,in->width,in->height,in->linesize[0],in->data[0]);
+    } else {
+        av_plot_int(x,y,n,in->width,in->height,in->linesize[plane],in->data[plane]);
+    }
+}
+
+static void drawPoint(GenutilFuncParams *params, AVFrame *in, int plane, double t, PFUNC(f), double a) {
+    double complex _z = f(t,params->p);
+    double complex z = av_genutil_rotate(_z,params->rot);
+    int x = floor(params->fx*creal(z) + params->w/2) + params->x;
+    int y = floor(params->fy*cimag(z) + params->h/2) + params->y;
+    av_plot_form(params->form,x,y,a,params->w,params->h,in->linesize[plane],in->data[plane]);
+}
+
+void debug(GenutilFuncParams *params, int frame_number, AVFrame *in, int plane) {
+    int k;
+    for(k=0;k<9;k++) {
+        draw_number(k*100+20, params->h-35, params->p[k], in, plane);
+    }
+    for(k=0;k<3;k++) {
+        //draw_number(k*100+20, params->h-16, params->cp[0][k], in, plane);
+    }
+    draw_int(params->w-50, params->h-35, frame_number, in, plane);
+}
+
+static void colored_curve(GenutilFuncParams *params, PFUNC(f), AVFrame *in) {
+    double t = params->start;
+    while(t<params->start+params->length) {
+        double colors[3];
+        av_genutil_get_color(params->cfunc, params->cp,t,params->cmod, params->is_rgb, colors);
+        drawPoint(params,in,0,t,f,colors[0]);
+        drawPoint(params,in,1,t,f,colors[1]);
+        drawPoint(params,in,2,t,f,colors[2]);
+        t+=params->delta;
+    }
+}
+
+static void colored_curve2(GenutilFuncParams *params, PFUNC(f), AVFrame *in) {
+    double t = params->start;
+    while(t<params->start+params->length) {
+        double colors[3];
+        av_genutil_get_color(params->cfunc, params->cp,t,params->cmod, params->is_rgb, colors);
+        drawPoint(params,in,0,t,f,colors[0]);
+        drawPoint(params,in,1,t,f,colors[1]);
+        drawPoint(params,in,2,t,f,colors[2]);
+        drawPoint(params,in,0,-t,f,colors[0]);
+        drawPoint(params,in,1,-t,f,colors[1]);
+        drawPoint(params,in,2,-t,f,colors[2]);
+        t+=params->delta;
+    }
+}
+
+static void set_alpha(GenutilFuncParams *params, AVFrame *in, double t, PFUNC(f), double a,double alpha,int ofsX, int ofsY) {
+    double complex _z = f(t,params->p);
+    double complex z = av_genutil_rotate(_z,alpha);
+    int x = floor(params->fx*creal(z) + params->w/2) + params->x + ofsX;
+    int y = floor(params->fy*cimag(z) + params->h/2) + params->y + ofsY;
+    if(params->is_packed_rgb) {
+        av_plot_form_p(params->form,x,y,a,params->w,params->h,in->linesize[0],in->data[0]+params->rgba_map[A]);
+    } else {
+        av_plot_form(params->form,x,y,a,params->w,params->h,in->linesize[3],in->data[3]);
+    }
+}
+
+
+static void curve(GenutilFuncParams *params, PFUNC(f),int n, AVFrame *in) {
+    double count = params->count;
+    double speed = params->speed;
+    int k;
+    for(k=0;k<count;k++) {
+        double alpha = (k/count) * 2 * M_PI;
+        int j;
+        double start = 0;
+        int layers = params->layers;
+        for(j=0;j<layers;j++) {
+            double s = start + params->length*j/layers;
+            double t = s + n*speed;
+            set_alpha(params,in,t,f,1,alpha,0,0);
+        }
+    }
+}
+
+static void pcurve(GenutilFuncParams *params, PFUNC(f),int n, AVFrame *in) {
+    double count = params->count;
+    double speed = params->speed;
+    int k;
+    for(k=0;k<count;k++) {
+        double alpha = (k/count) * 2 * M_PI;
+        int j;
+        double start = 0;
+        int layers = params->layers;
+        int clen = params->length*speed;
+        for(j=0;j<layers;j++) {
+            double s = start + params->length*j/layers;
+            double t = s + ((n%clen)+1)*speed;
+            set_alpha(params,in,t,f,1,alpha,0,0);
+        }
+    }
+}
+
+
+static void curve2(GenutilFuncParams *params, PFUNC(f),int n, AVFrame *in) {
+    double count = params->count;
+    double speed = params->speed;
+    int k;
+    for(k=0;k<count;k++) {
+        double alpha = (k/count) * 2 * M_PI;
+        int j;
+        double start = 0;
+        int layers = params->layers;
+        for(j=0;j<layers;j++) {
+            double s = start + params->length*j/layers;
+            double t = s + n*speed;
+            set_alpha(params,in,t,f,1,alpha,0,0);
+            set_alpha(params,in,-t,f,1,alpha,0,0);
+        }
+    }
+}
+
+/******************** FFUNCS **************************/
+
+
+
+
+
+typedef struct GenutilFunc {
+    const char *name;
+    void (*f)(GenutilFuncParams*, int,AVFrame *in);
+} GenutilFunc;
+
+void gzero(GenutilFuncParams *params, int n, AVFrame *in) {
+}
+
+static void genutil_hypo(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_hypocycloid,in);
+}
+static void genutil_lissg(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_lissajousG,in);
+}
+
+static void genutil_lissq(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_lissajousQ,in);
+}
+
+static void genutil_liss(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_lissajous,in);
+}
+
+static void genutil_leg(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_legendre,in);
+}
+
+static void genutil_cb(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_cb,in);
+}
+
+static void genutil_sinoid(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_sinusoid,in);
+}
+
+static void genutil_capri(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_capricornoid,in);
+}
+
+static void genutil_scara(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_scarabaeus,in);
+}
+
+static void genutil_tro(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_trochoid,in);
+}
+
+static void genutil_circ(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_circoid,in);
+}
+
+static void genutil_rhodo(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_rhodonea,in);
+}
+
+static void genutil_gielis(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_gielis,in);
+}
+
+static void genutil_super_rose(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_super_rose,in);
+}
+
+static void genutil_super_spiral(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_super_rose,in);
+}
+
+static void genutil_epi_spiral(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_epi_spiral,in);
+}
+
+static void genutil_spiral(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve2(params,av_genutil_spiral,in);
+}
+
+static void genutil_maclaurin(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_maclaurin,in);
+}
+
+static void genutil_harmonic(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_harmonic,in);
+}
+
+static void genutil_cornoid(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_cornoid,in);
+}
+
+static void genutil_line(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_line,in);
+}
+
+static void genutil_poly(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_poly,in);
+}
+
+static void genutil_addoid(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_addoid,in);
+}
+
+static void genutil_rndpoly(GenutilFuncParams *params, int n, AVFrame *in) {
+    double *p = params->p;
+    int len = floor(p[0]);
+    int size = p[1];
+    int k;
+    int last = -1;
+    for(k=3;k<len+3;) {
+        int rnd = rand() % 4;
+        
+        switch(rnd) {
+            case 0: if(last!=1) {p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
+            case 1: if(last!=0) {p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
+            case 2: if(last!=3) {p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2;last = rnd;} break;
+            case 3: if(last!=2) {p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2;last = rnd;} break;
+        }
+    }
+    p[k] = p[k-2]; p[k+1] = p[k-1];
+    colored_curve(params,av_genutil_poly,in);
+    p[1] = size;
+}
+
+static void genutil_rndpoly_p(GenutilFuncParams *params, int (*f)(int,int), int n, AVFrame *in) {
+    double *p = params->p;
+    int len = floor(p[0]);
+    int size = p[1];
+    int k=3;
+    int j;
+    int last = -1;
+    for(j=0;j<len;j++) {
+        //int rnd = rand() % 8;
+        int rnd = f(n,j);
+        switch(rnd) {
+            case 0: if(last!=4) {p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
+            case 4: if(last!=0) {p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
+            case 1: if(last!=5) {p[k] = p[k-2] - size; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
+            case 5: if(last!=1) {p[k] = p[k-2] + size; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
+            case 2: if(last!=6) {p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2;last = rnd;} break;
+            case 6: if(last!=2) {p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2;last = rnd;} break;
+            case 3: if(last!=7) {p[k] = p[k-2] - size; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
+            case 7: if(last!=3) {p[k] = p[k-2] + size; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
+        }
+    }
+    p[k] = p[k-2]; p[k+1] = p[k-1];
+    colored_curve(params,av_genutil_poly,in);
+    p[1] = size;
+}
+
+static int rnd(int n, int k) {
+    return rand() % 8;
+}
+
+static int test(int n, int k) {
+    //if(k%2==0) return  ((((n*n)%(k+1))*k)%4)+4 ;
+    //return (((n*n)%(k+1))*k)%4;
+    //return (int)(floor(sin(n*k)*8))%8;
+    //return (n%(k+1))%8;
+    //return ((int)floor((k/8)*n*n/(n+1)))%8;
+    //return ((n*k)%(k+1))%8;
+    //return ((int)floor(k*1.01*n))%8;
+    return ((int)floor(k*1.017321*n))%8;
+}
+
+static void genutil_rndpoly2(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p(params,rnd,n,in);
+}
+
+static void genutil_rndpoly3(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p(params,test,n,in);
+}
+
+
+static void ulam(int n, int *buf, int len) {
+    int k;
+    buf[0] = n;
+    for(k=1;k<len;k++) {
+        if(buf[k-1] %2 == 0) buf[k]=buf[k-1]/2;
+        else buf[k] = 3 * buf[k-1] +1;
+    }
+}
+
+static void genutil_ulam(GenutilFuncParams *params, int n, AVFrame *in) {
+    double *p = params->p;
+    int len = floor(p[0]);
+    int size = p[1];
+    int *buf = calloc(1000,sizeof(int));
+    ulam(n,buf,len/2);
+    int k,j;
+    k=3;
+    for(j=0;j<len;j++) {
+        
+        int rnd = buf[j/2] % 4;
+        switch(rnd) {
+            case 0: p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2; break;
+            case 2: p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2; break;
+            case 1: p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2; break;
+            case 3: p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2; break;
+            /*
+            case 4: if(last!=5) {p[k] = p[k-2] + size; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
+            case 5: if(last!=4) {p[k] = p[k-2] - size; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
+            case 6: if(last!=7) {p[k] = p[k-2] - size; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
+            case 7: if(last!=6) {p[k] = p[k-2] + size; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
+            */
+        }
+    }
+    p[k] = p[k-2]; p[k+1] = p[k-1];
+    colored_curve(params,av_genutil_poly,in);
+    p[1] = size;
+    free(buf);
+}
+
+/***** PLOT *********/
+static void genutil_pkardioids(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_kardio,n,in);
+}
+
+static void genutil_plemg(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_lemniskateG,n,in);
+}
+
+static void genutil_plemb(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_lemniskateB,n,in);
+}
+
+static void genutil_pepi(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_epicycloid,n,in);
+}
+
+static void genutil_plissg(GenutilFuncParams *params, int n, AVFrame *in) {
+    double t = 0;
+    while(t<params->length) {
+        int ofsX = params->x;
+        int ofsY = params->y;
+        set_alpha(params,in,t,av_genutil_lissajousG,1,0,ofsX,ofsY);
+        t+=params->speed;
+    }
+}
+
+
+static void genutil_plissq(GenutilFuncParams *params, int n, AVFrame *in) {
+    double t = 0;
+    while(t<params->length) {
+        int ofsX = params->x;
+        int ofsY = params->y;
+        set_alpha(params,in,t,av_genutil_lissajousQ,1,0,ofsX,ofsY);
+        t+=params->speed;
+    }
+}
+
+static void genutil_plissp(GenutilFuncParams *params, int n, AVFrame *in) {
+    double t = 0;
+    while(t<params->length) {
+        int ofsX = 0;
+        int ofsY = 0;
+        set_alpha(params,in,t,av_genutil_lissajous,1,0,ofsX,ofsY);
+        t+=params->speed;
+    }
+}
+
+static void genutil_pliss(GenutilFuncParams *params, int n, AVFrame *in) {
+    double count = params->count;
+    double speed = params->speed;
+    int k;
+    for(k=0;k<count;k++) {
+        double alpha = (k/count) * 2 * M_PI;
+        int ofsX = 0;
+        int ofsY = 0;
+        int j;
+        double start = 0;
+        int layers = params->layers;
+        for(j=0;j<layers;j++) {
+            double s = start + params->length*j/layers;
+            double t = s + n*speed;
+            set_alpha(params,in,t,av_genutil_lissajous,1,alpha,ofsX,ofsY);
+        }
+    }
+}
+
+static void genutil_pleg(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_legendre,n,in);
+}
+
+static void genutil_phypo(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_hypocycloid,n,in);
+}
+
+static void genutil_prhodo(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_rhodonea,n,in);
+}
+
+static void genutil_pnodal(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_nodal,n,in);
+}
+
+static void genutil_ptalbot(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_talbot,n,in);
+}
+
+static void genutil_pfolium(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_folium,n,in);
+}
+
+static void genutil_pgielis(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_gielis,n,in);
+}
+
+static void genutil_psuper_spiral(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_super_spiral,n,in);
+}
+
+static void genutil_psuper_rose(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_super_rose,n,in);
+}
+
+static void genutil_pcb(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_cb,n,in);
+}
+
+static void genutil_pepi_spiral(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_epi_spiral,n,in);
+}
+
+static void genutil_pspiral(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve2(params,av_genutil_spiral,n,in);
+}
+
+static void genutil_pmaclaurin(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_maclaurin,n,in);
+}
+
+static void genutil_pharmonic(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_harmonic,n,in);
+}
+
+static void genutil_pcornoid(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_cornoid,n,in);
+}
+
+static void genutil_psinoid(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_sinusoid,n,in);
+}
+
+static void genutil_pcapri(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_capricornoid,n,in);
+}
+
+static void genutil_pscara(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_scarabaeus,n,in);
+}
+
+static void genutil_ptro(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_trochoid,n,in);
+}
+
+static void genutil_pcirco(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_curve(params,av_genutil_circoid,in);
+}
+
+static void genutil_paddoid(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_addoid,n,in);
+}
+
+static void genutil_pline(GenutilFuncParams *params, int n, AVFrame *in) {
+    pcurve(params,av_genutil_line,n,in);
+}
+
+static void genutil_ppoly(GenutilFuncParams *params, int n, AVFrame *in) {
+    curve(params,av_genutil_poly,n,in);
+}
+
+static void genutil_prndpoly_p(GenutilFuncParams *params, int (*f)(int,double), int n, AVFrame *in) {
+    double *p = params->p;
+    int len = floor(p[0]);
+    int size = p[1];
+    double param = p[2];
+    int k=3;
+    int j;
+    int last = -1;
+    for(j=0;j<len;j++) {
+        //int rnd = rand() % 8;
+        int rnd = f(j,param);
+        switch(rnd) {
+            case 0: if(last!=4) {p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
+            case 4: if(last!=0) {p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
+            case 1: if(last!=5) {p[k] = p[k-2] - size; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
+            case 5: if(last!=1) {p[k] = p[k-2] + size; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
+            case 2: if(last!=6) {p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2;last = rnd;} break;
+            case 6: if(last!=2) {p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2;last = rnd;} break;
+            case 3: if(last!=7) {p[k] = p[k-2] - size; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
+            case 7: if(last!=3) {p[k] = p[k-2] + size; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
+        }
+    }
+    p[k] = p[k-2]; p[k+1] = p[k-1];
+    curve(params,av_genutil_poly,n,in);
+    p[1] = size;
+    p[2] = param;
+}
+static int dfunc(int k, double p) {
+    //if(k%2==0) return  ((((n*n)%(k+1))*k)%4)+4 ;
+    //return (((n*n)%(k+1))*k)%4;
+    //return (int)(floor(sin(n*k)*8))%8;
+    //return (n%(k+1))%8;
+    //return ((int)floor((k/8)*n*n/(n+1)))%8;
+    //return ((n*k)%(k+1))%8;
+    //return ((int)floor(k*1.01*n))%8;
+    return ((int)floor(k*p))%8;
+}
+static void genutil_prndpoly(GenutilFuncParams *params,int n, AVFrame *in) {
+     genutil_prndpoly_p(params,dfunc,n,in);
+}
+
+static void genutil_circs(GenutilFuncParams *params, int n, AVFrame *in) {
+    double count = params->count;
+    double speed = params->speed;
+    int k;
+    for(k=0;k<count;k++) {
+        double alpha = (k/count) * 2 * M_PI;
+        int ofsX = floor(cos(alpha) * params->p[0]);
+        int ofsY = floor(sin(alpha) * params->p[1]);
+        double start = 2*M_PI*k/count;
+        int j;
+        int layers = params->layers;
+        for(j=0;j<layers;j++) {
+            double s = start + params->length*j/layers;
+            double t = s + n*speed;
+            set_alpha(params,in,t,av_genutil_circ,1,0,ofsX,ofsY);
+        }
+    }
+} 
+
+static GenutilFunc gfuncs[] = {
+    {"hypo",genutil_hypo},
+    {"lissg",genutil_lissg},
+    {"lissq",genutil_lissq},
+    {"liss",genutil_liss},
+    {"leg",genutil_leg},
+    {"cb",genutil_cb},
+    {"sinoid",genutil_sinoid},
+    {"capri",genutil_capri},
+    {"scara",genutil_scara},
+    {"tro",genutil_tro},
+    {"circ",genutil_circ},
+    {"rhodo",genutil_rhodo},
+    {"superrose",genutil_super_rose},
+    {"superspiral",genutil_super_spiral},
+    {"epispiral",genutil_epi_spiral},
+    {"spiral",genutil_spiral},
+    {"gielis",genutil_gielis},
+    {"maclaurin",genutil_maclaurin},
+    {"harmonic",genutil_harmonic},
+    {"cornoid",genutil_cornoid},
+    {"line",genutil_line},
+    {"poly",genutil_poly},
+    {"rndpoly",genutil_rndpoly},
+    {"rndpoly2",genutil_rndpoly2},
+    {"rndpoly3",genutil_rndpoly3},
+    {"ulam",genutil_ulam},
+    {"addoid",genutil_addoid},
+    {"phypo",genutil_phypo},
+    {"pkardiods",genutil_pkardioids},
+    {"plemg",genutil_plemg},
+    {"plemb",genutil_plemb},
+    {"pepi",genutil_pepi},
+    {"pnodal",genutil_pnodal},
+    {"ptalbot",genutil_ptalbot},
+    {"pfolium",genutil_pfolium},
+    {"plissg",genutil_plissg},
+    {"plissq",genutil_plissq},
+    {"plissp",genutil_plissp},
+    {"pliss",genutil_pliss},
+    {"pleg",genutil_pleg},
+    {"pcb",genutil_pcb},
+    {"psinoid",genutil_psinoid},
+    {"pcapri",genutil_pcapri},
+    {"pscara",genutil_pscara},
+    {"ptro",genutil_ptro},
+    {"pcirc",genutil_pcirco},
+    {"pcircs",genutil_circs},
+    {"prhodo",genutil_prhodo},
+    {"psuperrose",genutil_psuper_rose},
+    {"psuperspiral",genutil_psuper_spiral},
+    {"pepispiral",genutil_pepi_spiral},
+    {"pspiral",genutil_pspiral},
+    {"pgielis",genutil_pgielis},
+    {"pmaclaurin",genutil_pmaclaurin},
+    {"pharmonic",genutil_pharmonic},
+    {"pcornoid",genutil_pcornoid},
+    {"pline",genutil_pline},
+    {"ppoly",genutil_ppoly},
+    {"prndpoly",genutil_prndpoly},
+    {"paddoid",genutil_paddoid},
+    {"zero",gzero},
+    {NULL,NULL}
+};
+
+void (*av_genutil_get_ffunc(const char *name))(GenutilFuncParams*,int,AVFrame*) {
+    int k=0;
+    while(gfuncs[k].name) {
+        if(!strcmp(name, gfuncs[k].name)) {
+            return gfuncs[k].f;
+        }
+        k++;
+    }
+    return NULL;
+
+}
+
+void av_genutil_parse_ffunc(const char *nf, double *p, void (**f)(GenutilFuncParams*,int,AVFrame*)) {
+    char *saveptr,*token;
+    char *str = strdup(nf);
+    int j;
+    for (j = 0; ; j++, str = NULL) {
+        token = av_strtok(str, " |", &saveptr);
+        if (token == NULL)
+            break;
+        if(j==0) {
+            *f = av_genutil_get_ffunc(token);
+        } else {
+            p[j-1] = atof(token);
+        }
+    }
+    free(str);
 }
 
 
