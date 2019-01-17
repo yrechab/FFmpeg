@@ -42,15 +42,12 @@ typedef struct PlotContext {
     const char *f;
     const char *ff;
     double p[40];
-    //double _p[40];
     const char *nf[20];
 
     double (*nfunc[20])(int,double*);
     double np[20][NMAXPARAMS];
-    //double _np[4][10];
     const char *n[4];
     int nmod[20]; // modulo n
-    //void (*ffunc)(struct PlotContext*,int, AVFrame *in);
     void (*ffunc)(GenutilFuncParams*,int,AVFrame *in);
     int w,h;
     double fx;
@@ -548,10 +545,13 @@ static int plot_filter_frame(AVFilterLink *inlink, AVFrame *in)
     double n = inlink->frame_count_out;
     dim(plot,in);
     GenutilFuncParams params;
+    double *p = calloc(40,sizeof(double));
+    params.p = p;
     make_params(plot,&params,n);
     if(plot->dbg) debug(&params,n,in,plot->is_packed_rgb?-1:0);
     plot->ffunc(&params, n, in);
     copy0(plot,in);
+    free(p);
     return ff_filter_frame(outlink, in);
 }
 

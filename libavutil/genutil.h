@@ -14,11 +14,13 @@
 #define NMAXPARAMS 40
 #define CMAXPARAMS 40
 
+#define SIGN(x) (x==0?0:x/fabs(x))
+
 enum { Y, U, V, A };
 
 typedef struct GenutilFuncParams {
     // func params
-    double p[1000];
+    double *p;
     //color
     double (*cfunc[3])(double,double*);
     double cp[3][10];

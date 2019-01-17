@@ -457,15 +457,15 @@ static void make_params(PlotCurveContext *plotcurve, GenutilFuncParams *params, 
                     break;
                 }
                 case 'w': {
-                    if(mode[0] == 'o') params->fx = floor(value);
-                    if(mode[0] == 'a') params->fx = floor(plotcurve->fx + value);
-                    if(mode[0] == 's') params->fx = floor(plotcurve->fx - value);
+                    if(mode[0] == 'o') params->fx = value;
+                    if(mode[0] == 'a') params->fx = plotcurve->fx + value;
+                    if(mode[0] == 's') params->fx = plotcurve->fx - value;
                     break;
                 }
                 case 'h': {
-                    if(mode[0] == 'o') params->fy = floor(value);
-                    if(mode[0] == 'a') params->fy = floor(plotcurve->fy + value);
-                    if(mode[0] == 's') params->fy = floor(plotcurve->fy - value);
+                    if(mode[0] == 'o') params->fy = value;
+                    if(mode[0] == 'a') params->fy = plotcurve->fy + value;
+                    if(mode[0] == 's') params->fy = plotcurve->fy - value;
                     break;
                 }
                 case 'r': {
@@ -526,9 +526,12 @@ static int plotcurve_filter_frame(AVFilterLink *inlink, AVFrame *in)
     black_yuv(plotcurve,in);
     double n = inlink->frame_count_out;
     GenutilFuncParams params;
+    double *p = calloc(40,sizeof(double));
+    params.p = p;
     make_params(plotcurve,&params,n);
     if(plotcurve->dbg) debug(&params,n,in,0);
     plotcurve->ffunc(&params,n+plotcurve->offset,in);
+    free(p);
     return ff_filter_frame(outlink, in);
 }
 

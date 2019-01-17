@@ -240,6 +240,7 @@ void av_plot_int_p(int x, int y, int n, uint8_t *color, int w, int h, int linesi
 
 
 static void plot_form(PF(plotf),int form, int x, int y, double a, int w, int h,int linesize, uint8_t *buf) {
+    int i,j;
     switch(form) {
         case 0: plotf(x,y,a,w,h,linesize,buf);
                 break;
@@ -300,6 +301,10 @@ static void plot_form(PF(plotf),int form, int x, int y, double a, int w, int h,i
                 plotf(x-8,y,a,w,h,linesize,buf);
                 plotf(x+12,y,a,w,h,linesize,buf);
                 plotf(x-12,y,a,w,h,linesize,buf);
+                break;
+        case 9: for(i=-2;i<=2;i++)
+                    for(j=-2;j<=2;j++) 
+                        plotf(x+i,y+j,a,w,h,linesize,buf);
                 break;
         default:plotf(x,y,a,w,h,linesize,buf);
                 break;
