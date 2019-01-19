@@ -334,7 +334,7 @@ double complex av_genutil_cornoid(double t, double *p) {
 
 
 /******************** UTIL ****************************/
-static void draw_number(int x, int y, double z, AVFrame *in, int plane) {
+void av_genutil_draw_number(int x, int y, double z, AVFrame *in, int plane) {
     if(plane == -1) { // packed rgb
         uint8_t color[] = {255,255,255,255};
         av_plot_number_p(x,y,z,color,in->width,in->height,in->linesize[0],in->data[0]);
@@ -343,7 +343,7 @@ static void draw_number(int x, int y, double z, AVFrame *in, int plane) {
     }
 }
 
-static void draw_int(int x, int y, int n, AVFrame *in,int plane) {
+void av_genutil_draw_int(int x, int y, int n, AVFrame *in,int plane) {
     if(plane == -1) { // packed rgb
         uint8_t color[] = {255,255,255,255};
         av_plot_int_p(x,y,n,color,in->width,in->height,in->linesize[0],in->data[0]);
@@ -370,12 +370,12 @@ static void plot_point(GenutilFuncParams *params, AVFrame *in, int plane, double
 void debug(GenutilFuncParams *params, int frame_number, AVFrame *in, int plane) {
     int k;
     for(k=0;k<9;k++) {
-        draw_number(k*100+20, params->h-35, params->p[k], in, plane);
+        av_genutil_draw_number(k*100+20, params->h-35, params->p[k], in, plane);
     }
     for(k=0;k<3;k++) {
-        //draw_number(k*100+20, params->h-16, params->cp[0][k], in, plane);
+        //av_genutil_draw_number(k*100+20, params->h-16, params->cp[0][k], in, plane);
     }
-    draw_int(params->w-50, params->h-35, frame_number, in, plane);
+    av_genutil_draw_int(params->w-50, params->h-35, frame_number, in, plane);
 }
 
 static void colored_curve(GenutilFuncParams *params, PFUNC(f), AVFrame *in) {

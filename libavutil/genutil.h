@@ -101,6 +101,6 @@ void av_genutil_replace_char(char *str, char needle, char rep);
 double czero(double t, double *p);
 void gzero(GenutilFuncParams *params, int n, AVFrame *in);
 void debug(GenutilFuncParams *params, int frame_number, AVFrame *in, int plane);
-
-
+void av_genutil_draw_number(int x, int y, double z, AVFrame *in, int plane);
+void av_genutil_draw_int(int x, int y, int n, AVFrame *in,int plane);
 #endif
