@@ -14,7 +14,7 @@
 #define NMAXPARAMS 40
 #define CMAXPARAMS 40
 
-#define SIGN(x) (x==0?0:x/fabs(x))
+#define SIGN(x) (x==0?0:x/fabsl(x))
 
 enum { Y, U, V, A };
 

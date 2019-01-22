@@ -45,7 +45,7 @@ typedef struct FracFuncParams {
     double rot;
     double *p;
     int ifcmode;
-    double complex (*ifunc)(double complex,double*);
+    long double complex (*ifunc)(long double complex,double*);
     double ip[10];
     double (*cfunc[3])(double,double*);
     double cp[3][10];
@@ -59,7 +59,7 @@ typedef struct FracContext {
     void (*ffunc)(FracFuncParams *, AVFrame*,int,int,int);
     double p[40];
     const char *ifc;
-    double complex (*ifunc)(double complex,double*);
+    long double complex (*ifunc)(long double complex,double*);
     double ip[10];
     int ifcmode;
     const char *nf[10];
@@ -146,38 +146,61 @@ static const AVOption frac_options[] = {
 AVFILTER_DEFINE_CLASS(frac);
 typedef struct IFunc {
     const char *name;
-    double complex (*f)(double complex,double*);
+    long double complex (*f)(long double complex,double*);
 } IFunc;
 
-static double complex izero(double complex z, double *p) {
+static long double complex izero(long double complex z, double *p) {
     return 0;
 }
 
-static double complex hopalong(double complex z, double *p) {
+static long double complex hopalong(long double complex z, double *p) {
     double a = p[0];
     double b = p[1];
     double c = p[2];
-    double x0 = creal(z);
-    double y0 = cimag(z);
-    double x =  y0 - SIGN(x0)*sqrt(fabs(b*x0-c));
-    double y = a - x0;
+    long double x0 = creal(z);
+    long double y0 = cimag(z);
+    long double x =  y0 - SIGN(x0)*sqrt(fabsl(b*x0-c));
+    long double y = a - x0;
     return x + I * y;
 }
 
-static double complex mandel(double complex z, double *p) {
-    double c = p[0]+ I* p[1];
+static long double complex mandel(long double complex z, double *p) {
+    long double complex c = p[0]+ I * p[1];
     return z*z + c;
 }
 
+static long double complex exp4(long double complex z, double *p) {
+    long double complex c = p[0]+ I * p[1];
+    return cexpl(z/(c*c*c*c));
+}
+
+static long double complex exp3(long double complex z, double *p) {
+    long double complex c = p[0]+ I * p[1];
+    return cexpl((z*z*z)/(c*c*c));
+}
+
+static long double complex exp_2(long double complex z, double *p) {
+    long double complex c = p[0]+ I * p[1];
+    return cexpl((z*z-p[2]*z)/(c*c*c));
+}
+
+static long double complex cosinv(long double complex z, double *p) {
+    long double complex c = p[0]+ I * p[1];
+    return ccosl(z/c);
+}
 
 static IFunc ifuncs[] = {
     { "zero", izero },
     { "hopalong", hopalong },
     { "mandel", mandel },
+    { "exp4", exp4 },
+    { "exp3", exp3 },
+    { "exp2", exp_2 },
+    { "cosinv", cosinv },
     { NULL, NULL }
 };
 
-static double complex (*get_ifunc(const char *name))(double complex, double*) {
+static long double complex (*get_ifunc(const char *name))(long double complex, double*) {
     int k=0;
     while(ifuncs[k].name) {
         if(!strcmp(name, ifuncs[k].name)) {
@@ -188,7 +211,7 @@ static double complex (*get_ifunc(const char *name))(double complex, double*) {
     return NULL;
 }
 
-static void parse_ifunc(const char *ff, double *p, double complex (**f)(double complex, double*)) {
+static void parse_ifunc(const char *ff, double *p, long double complex (**f)(long double complex, double*)) {
     char *saveptr,*token;
     char *str = strdup(ff);
     int j;
@@ -236,19 +259,47 @@ static void sqs(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     }
 }
 
-static void m(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+static void j(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     int plane;
     double len = params->p[0];
     int k;
-    double complex z = (x*params->fx+params->x) + I * (y*params->fy+params->y);
+    long double complex z = (x-params->w/2)*params->fx+params->x + I * (y-params->h/2)*params->fy+params->y;
     for(k=0;k<len;k++) {
         z = params->ifunc(z,params->ip);
-        if(params->ifcmode == 0 && cabs(z) > params->p[1]) {
+        if(params->ifcmode == 0 && cabsl(z) > params->p[1]) {
             break;
         }
     }
     double colors[3];
     av_genutil_get_color(params->cfunc, params->cp,k,params->cmod, params->is_rgb, colors);
+    uint8_t *ptr;
+    for(plane=0;plane<3;plane++) {
+        ptr = in->data[plane] + in->linesize[plane] * y;
+        ptr[x] = (k>=len)?0:floor(colors[plane]*255);
+    }
+}
+
+static void m(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+    int plane;
+    double len = params->p[0];
+    int k;
+    long double x0 = (x-params->w/2)*params->fx+params->x; 
+    long double y0 = (y-params->h/2)*params->fy+params->y;
+    double ip[] = { x0, y0 };
+    long double complex z = 0;
+    double max=0;
+    for(k=0;k<len;k++) {
+        z = params->ifunc(z,ip);
+        if(params->ifcmode == 0 && cabsl(z) > params->p[1]) {
+            max = k;
+            break;
+        }
+        if(params->ifcmode == 2) {
+            if(fabsl(creal(z)) > max) max = (fabsl(creal(z)));
+        }
+    }
+    double colors[3];
+    av_genutil_get_color(params->cfunc, params->cp,max,params->cmod, params->is_rgb, colors);
     uint8_t *ptr;
     for(plane=0;plane<3;plane++) {
         ptr = in->data[plane] + in->linesize[plane] * y;
@@ -266,20 +317,20 @@ static void hopa(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     double c = params->ip[2];
     double ip[] = { a, b, c, 0, 0 ,0, 0, 0, 0, 0 };
     int k;
-    double complex z = 0;
+    long double complex z = 0;
     double max=0;
     for(k=0;k<len;k++) {
         z = params->ifunc(z,ip);
-        if(params->ifcmode == 0 && cabs(z) > params->p[1]) {
+        if(params->ifcmode == 0 && cabsl(z) > params->p[1]) {
             max = k;
             break;
         }
-        if(params->ifcmode == 1 && (fabs(creal(z)) > params->p[1])) {
+        if(params->ifcmode == 1 && (fabsl(creal(z)) > params->p[1])) {
             max = k;
             break;
         }
         if(params->ifcmode == 2) {
-            if(fabs(creal(z)) > max) max = (fabs(creal(z)));
+            if(fabsl(creal(z)) > max) max = (fabsl(creal(z)));
         }
     }
     double colors[3];
@@ -296,6 +347,7 @@ static Func funcs[] = {
     { "sq", sq },
     { "sqs", sqs },
     { "hopa", hopa },
+    { "j", j },
     { "m", m },
     { NULL, NULL }
 };

@@ -1293,6 +1293,10 @@ static double nexp(int n, double *p) {
     return p[2] + p[1]*(exp(p[0]*n-p[3]));
 }
 
+static double nexpinv(int n, double *p) {
+    return p[2] + p[1]/(exp(p[0]*n-p[3]));
+}
+
 static double nexp2(int n, double *p) {
     return p[2] + p[1]*(exp(p[0]*n*n-p[3]));
 }
@@ -1317,7 +1321,7 @@ static double lin(int n, double *p) {
 
 static double inv(int n, double *p) {
     double x = (double)n*p[0];
-    return p[1]*(1/((double)x+1));
+    return p[1]*(1/(p[2]*((double)x+1)));
 }
 
 static double pval(int n, double *p) {
@@ -1365,6 +1369,7 @@ static NFunc nfuncs[] = {
     {"sq",sqn},
     {"ln",ln},
     {"exp",nexp},
+    {"expinv",nexpinv},
     {"exp2",nexp2},
     {NULL,NULL}
 };
