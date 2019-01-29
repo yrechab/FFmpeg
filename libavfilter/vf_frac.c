@@ -45,7 +45,7 @@ typedef struct FracFuncParams {
     double rot;
     double *p;
     int ifcmode;
-    long double complex (*ifunc)(long double complex,double*);
+    long double complex (*ifunc)(long double complex,long double*);
     double ip[10];
     double (*cfunc[3])(double,double*);
     double cp[3][10];
@@ -59,7 +59,7 @@ typedef struct FracContext {
     void (*ffunc)(FracFuncParams *, AVFrame*,int,int,int);
     double p[40];
     const char *ifc;
-    long double complex (*ifunc)(long double complex,double*);
+    long double complex (*ifunc)(long double complex,long double*);
     double ip[10];
     int ifcmode;
     const char *nf[10];
@@ -146,88 +146,88 @@ static const AVOption frac_options[] = {
 AVFILTER_DEFINE_CLASS(frac);
 typedef struct IFunc {
     const char *name;
-    long double complex (*f)(long double complex,double*);
+    long double complex (*f)(long double complex,long double*);
 } IFunc;
 
-static long double complex izero(long double complex z, double *p) {
+static long double complex izero(long double complex z, long double *p) {
     return 0;
 }
 
-static long double complex hopalong(long double complex z, double *p) {
-    double a = p[0];
-    double b = p[1];
-    double c = p[2];
-    long double x0 = creal(z);
-    long double y0 = cimag(z);
+static long double complex hopalong(long double complex z, long double *p) {
+    long double a = p[0];
+    long double b = p[1];
+    long double c = p[2];
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
     long double x =  y0 - SIGN(x0)*sqrt(fabsl(b*x0-c));
     long double y = a - x0;
     return x + I * y;
 }
 
-static long double complex ginger(double long complex z, double *p) {
-    double x = p[0] - cimag(z) + fabs(creal(z));
-    double y = p[1] * creal(z);
+static long double complex ginger(double long complex z, long double *p) {
+    long double x = p[0] - cimagl(z) + fabsl(creall(z));
+    long double y = p[1] * creall(z);
     return x + I * y;
 }
 
 
-static double miraf(double x, double a) {
+static long double miraf(long double x, long double a) {
     return a*x-(1-a)*(2*x*x/(1+x*x));
 }
 
-static long double complex mira(long double complex z, double *p) {
-    double a = p[0];
-    double b = p[1];
-    double x = b * cimag(z) + miraf(creal(z),a);
-    double y = -creal(z) + miraf(x,a);
+static long double complex mira(long double complex z, long double *p) {
+    long double a = p[0];
+    long double b = p[1];
+    long double x = b * cimagl(z) + miraf(creall(z),a);
+    long double y = -creall(z) + miraf(x,a);
     return x + I * y;
 }
 
-static long double complex kaneko(long double complex z, double *p) {
-    double a = p[0];
-    double b = p[1];
-    double x = a * creal(z) + (1-a)*(1-b*cimag(z)*cimag(z));
-    double y = creal(z);
+static long double complex kaneko(long double complex z, long double *p) {
+    long double a = p[0];
+    long double b = p[1];
+    long double x = a * creall(z) + (1-a)*(1-b*cimagl(z)*cimagl(z));
+    long double y = creal(z);
     return x + I * y;
 }
 
 
-static long double complex mandel(long double complex z, double *p) {
+static long double complex mandel(long double complex z, long double *p) {
     long double complex c = p[0]+ I * p[1];
     return z*z + c;
 }
 
-static long double complex exp4(long double complex z, double *p) {
+static long double complex exp4(long double complex z, long double *p) {
     long double complex c = p[0]+ I * p[1];
     return cexpl(z/(c*c*c*c));
 }
 
-static long double complex expc(long double complex z, double *p) {
+static long double complex expc(long double complex z, long double *p) {
     long double complex c = p[0]+ I * p[1];
     return cexpl((z*z+p[2]*z)/csqrtl(c*c*c));
 }
 
-static long double complex sin_h(long double complex z, double *p) {
+static long double complex sin_h(long double complex z, long double *p) {
     long double complex c = p[0]+ I * p[1];
     return csinhl(z/c);
 }
 
-static long double complex exp3(long double complex z, double *p) {
+static long double complex exp3(long double complex z, long double *p) {
     long double complex c = p[0]+ I * p[1];
     return cexpl((z*z*z)/(c*c*c));
 }
 
-static long double complex exp_2(long double complex z, double *p) {
+static long double complex exp_2(long double complex z, long double *p) {
     long double complex c = p[0]+ I * p[1];
     return cexpl((z*z-p[2]*z)/(c*c*c));
 }
 
-static long double complex cosinv(long double complex z, double *p) {
+static long double complex cosinv(long double complex z, long double *p) {
     long double complex c = p[0]+ I * p[1];
     return ccosl(z/c);
 }
 
-static long double complex taninv(long double complex z, double *p) {
+static long double complex taninv(long double complex z, long double *p) {
     long double complex c = p[0]+ I * p[1];
     return ctanl(z/c);
 }
@@ -249,7 +249,7 @@ static IFunc ifuncs[] = {
     { NULL, NULL }
 };
 
-static long double complex (*get_ifunc(const char *name))(long double complex, double*) {
+static long double complex (*get_ifunc(const char *name))(long double complex, long double*) {
     int k=0;
     while(ifuncs[k].name) {
         if(!strcmp(name, ifuncs[k].name)) {
@@ -260,7 +260,7 @@ static long double complex (*get_ifunc(const char *name))(long double complex, d
     return NULL;
 }
 
-static void parse_ifunc(const char *ff, double *p, long double complex (**f)(long double complex, double*)) {
+static void parse_ifunc(const char *ff, long double *p, long double complex (**f)(long double complex, long double*)) {
     char *saveptr,*token;
     char *str = strdup(ff);
     int j;
@@ -334,7 +334,7 @@ static void m(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     int k;
     long double x0 = (x-params->w/2)*params->fx+params->x; 
     long double y0 = (y-params->h/2)*params->fy+params->y;
-    double ip[] = { x0, y0 };
+    long double ip[] = { x0, y0 };
     long double complex z = 0;
     double max=0;
     for(k=0;k<len;k++) {
@@ -344,7 +344,7 @@ static void m(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
             break;
         }
         if(params->ifcmode == 2) {
-            if(fabsl(creal(z)) > max) max = (fabsl(creal(z)));
+            if(fabsl(creall(z)) > max) max = (fabsl(creall(z)));
         }
     }
     double colors[3];
@@ -361,10 +361,10 @@ static void hopa(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     //int x0 = x-params->w/2;
     //int y0 = y-params->h/2;
     double len = params->p[0];
-    double a = params->ip[0] + params->p[2] * (y+params->y)*params->fy;
-    double b = params->ip[1] + params->p[3] * (x+params->x)*params->fx;
-    double c = params->ip[2];
-    double ip[] = { a, b, c, 0, 0 ,0, 0, 0, 0, 0 };
+    long double a = params->ip[0] + params->p[2] * (y+params->y)*params->fy;
+    long double b = params->ip[1] + params->p[3] * (x+params->x)*params->fx;
+    long double c = params->ip[2];
+    long double ip[] = { a, b, c, 0, 0 ,0, 0, 0, 0, 0 };
     int k;
     long double complex z = 0;
     double max=0;
@@ -374,12 +374,12 @@ static void hopa(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
             max = k;
             break;
         }
-        if(params->ifcmode == 1 && (fabsl(creal(z)) > params->p[1])) {
+        if(params->ifcmode == 1 && (fabsl(creall(z)) > params->p[1])) {
             max = k;
             break;
         }
         if(params->ifcmode == 2) {
-            if(fabsl(creal(z)) > max) max = (fabsl(creal(z)));
+            if(fabsl(creall(z)) > max) max = (fabsl(creall(z)));
         }
     }
     double colors[3];
@@ -396,10 +396,10 @@ static void hopa1(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     int x0 = x-params->w/2;
     int y0 = y-params->h/2;
     double len = params->p[0];
-    double a = params->ip[0] + params->p[2] * (y0*params->fy+params->y);
-    double b = params->ip[1] + params->p[3] * (x0*params->fx+params->x);
-    double c = params->ip[2];
-    double ip[] = { a, b, c, 0, 0 ,0, 0, 0, 0, 0 };
+    long double a = params->ip[0] + params->p[2] * (y0*params->fy+params->y);
+    long double b = params->ip[1] + params->p[3] * (x0*params->fx+params->x);
+    long double c = params->ip[2];
+    long double ip[] = { a, b, c, 0, 0 ,0, 0, 0, 0, 0 };
     int k;
     long double complex z = params->p[4] + I * params->p[5];
     double max=0;
@@ -409,12 +409,12 @@ static void hopa1(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
             max = k;
             break;
         }
-        if(params->ifcmode == 1 && (fabsl(creal(z)) > params->p[1])) {
+        if(params->ifcmode == 1 && (fabsl(creall(z)) > params->p[1])) {
             max = k;
             break;
         }
         if(params->ifcmode == 2) {
-            if(fabsl(creal(z)) > max) max = (fabsl(creal(z)));
+            if(fabsl(creall(z)) > max) max = (fabsl(creall(z)));
         }
     }
     double colors[3];
