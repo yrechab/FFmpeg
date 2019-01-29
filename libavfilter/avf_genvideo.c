@@ -508,16 +508,16 @@ static void zero(GenVideoContext *genvideo, int n, AVFrame *in) {
 
 
 static void circs(GenVideoContext *genvideo, int n, AVFrame *in) {
+    double count = genvideo->count + (int)genvideo->_p[3];
+    double speed = genvideo->speed;
     blackYUV(genvideo,in);
-    if(genvideo->dbg) {
+	    if(genvideo->dbg) {
         int k;
         for(k=0;k<4;k++) {
             draw_number(genvideo->w-k*100-100, genvideo->h-35, genvideo->_p[k], in);
         }
     }
 
-    double count = genvideo->count + (int)genvideo->_p[3];
-    double speed = genvideo->speed;
     int k;
     for(k=0;k<count;k++) {
         double alpha = (k/count) * 2 * M_PI;
@@ -832,7 +832,7 @@ static int modify(GenVideoContext *s, int frameNumber) {
     int j,i,k;
     const char *format = "%s %d %s %s %d %lf %d %d %d";
     const int win_size = s->win_size;
-    double buf[win_size];
+    double *buf=calloc(win_size,sizeof(double));
     i=0;
     for(j=0;j<10;j++) {
         if(s->rf[j]) {
@@ -886,6 +886,7 @@ static int modify(GenVideoContext *s, int frameNumber) {
         }
         i++;
     }
+    free(buf);
     return 0;
 }
 

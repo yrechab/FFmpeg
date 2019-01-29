@@ -1259,9 +1259,9 @@ static int genutil_count_brackets(char *str) {
 }
 
 static void genutil_interpreter_b(char *str, double alpha, double flen, double *p, int b) {
-    double x[b*2]; 
-    double y[b*2];
-    double phi[b*2];
+    double *x = calloc(b*2,sizeof(double));
+    double *y = calloc(b*2,sizeof(double));
+    double *phi = calloc(b*2,sizeof(double));
     x[0] = 0;
     y[0] = 0;
     phi[0] = 0;
@@ -1294,7 +1294,9 @@ static void genutil_interpreter_b(char *str, double alpha, double flen, double *
               break;
         }
     }
-;
+    free(x);
+    free(y);
+    free(phi);
 }
 
 static void genutil_interpreter_n(char *str, double alpha, double flen, double *p) {
