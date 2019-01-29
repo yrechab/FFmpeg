@@ -164,6 +164,34 @@ static long double complex hopalong(long double complex z, double *p) {
     return x + I * y;
 }
 
+static long double complex ginger(double long complex z, double *p) {
+    double x = p[0] - cimag(z) + fabs(creal(z));
+    double y = p[1] * creal(z);
+    return x + I * y;
+}
+
+
+static double miraf(double x, double a) {
+    return a*x-(1-a)*(2*x*x/(1+x*x));
+}
+
+static long double complex mira(long double complex z, double *p) {
+    double a = p[0];
+    double b = p[1];
+    double x = b * cimag(z) + miraf(creal(z),a);
+    double y = -creal(z) + miraf(x,a);
+    return x + I * y;
+}
+
+static long double complex kaneko(long double complex z, double *p) {
+    double a = p[0];
+    double b = p[1];
+    double x = a * creal(z) + (1-a)*(1-b*cimag(z)*cimag(z));
+    double y = creal(z);
+    return x + I * y;
+}
+
+
 static long double complex mandel(long double complex z, double *p) {
     long double complex c = p[0]+ I * p[1];
     return z*z + c;
@@ -172,6 +200,16 @@ static long double complex mandel(long double complex z, double *p) {
 static long double complex exp4(long double complex z, double *p) {
     long double complex c = p[0]+ I * p[1];
     return cexpl(z/(c*c*c*c));
+}
+
+static long double complex expc(long double complex z, double *p) {
+    long double complex c = p[0]+ I * p[1];
+    return cexpl((z*z+p[2]*z)/csqrtl(c*c*c));
+}
+
+static long double complex sin_h(long double complex z, double *p) {
+    long double complex c = p[0]+ I * p[1];
+    return csinhl(z/c);
 }
 
 static long double complex exp3(long double complex z, double *p) {
@@ -189,14 +227,25 @@ static long double complex cosinv(long double complex z, double *p) {
     return ccosl(z/c);
 }
 
+static long double complex taninv(long double complex z, double *p) {
+    long double complex c = p[0]+ I * p[1];
+    return ctanl(z/c);
+}
+
 static IFunc ifuncs[] = {
     { "zero", izero },
     { "hopalong", hopalong },
+    { "mira", mira },
+    { "kaneko", kaneko },
+    { "ginger", ginger },
     { "mandel", mandel },
     { "exp4", exp4 },
     { "exp3", exp3 },
     { "exp2", exp_2 },
+    { "expc", expc },
+    { "sinh", sin_h },
     { "cosinv", cosinv },
+    { "tan", taninv },
     { NULL, NULL }
 };
 
@@ -342,11 +391,47 @@ static void hopa(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     }
 }
 
+static void hopa1(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+    int plane;
+    int x0 = x-params->w/2;
+    int y0 = y-params->h/2;
+    double len = params->p[0];
+    double a = params->ip[0] + params->p[2] * (y0*params->fy+params->y);
+    double b = params->ip[1] + params->p[3] * (x0*params->fx+params->x);
+    double c = params->ip[2];
+    double ip[] = { a, b, c, 0, 0 ,0, 0, 0, 0, 0 };
+    int k;
+    long double complex z = params->p[4] + I * params->p[5];
+    double max=0;
+    for(k=0;k<len;k++) {
+        z = params->ifunc(z,ip);
+        if(params->ifcmode == 0 && cabsl(z) > params->p[1]) {
+            max = k;
+            break;
+        }
+        if(params->ifcmode == 1 && (fabsl(creal(z)) > params->p[1])) {
+            max = k;
+            break;
+        }
+        if(params->ifcmode == 2) {
+            if(fabsl(creal(z)) > max) max = (fabsl(creal(z)));
+        }
+    }
+    double colors[3];
+    av_genutil_get_color(params->cfunc, params->cp,max,params->cmod, params->is_rgb, colors);
+    uint8_t *ptr;
+    for(plane=0;plane<3;plane++) {
+        ptr = in->data[plane] + in->linesize[plane] * y;
+        ptr[x] = (k>=len&&params->ifcmode!=2)?0:floor(colors[plane]*255);
+    }
+}
+
 static Func funcs[] = {
     { "zero", zero },
     { "sq", sq },
     { "sqs", sqs },
     { "hopa", hopa },
+    { "hopa1", hopa1 },
     { "j", j },
     { "m", m },
     { NULL, NULL }
@@ -654,6 +739,8 @@ static void fdebug(FracFuncParams *params, int frame_number, AVFrame *in) {
     av_genutil_draw_int(params->w-50, params->h-16, frame_number, in, 0);
     av_genutil_draw_int(params->w-50, params->h-16, frame_number, in, 1);
     av_genutil_draw_int(params->w-50, params->h-16, frame_number, in, 2);
+    //av_plot_form(1,params->w/2,params->h/2,1,params->w,params->h,in->linesize[0],in->data[0]);
+
 }
 
 

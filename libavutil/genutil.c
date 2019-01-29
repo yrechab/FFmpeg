@@ -89,6 +89,31 @@ double complex av_genutil_poly(double t, double *p) {
     }
     return ret;
 }
+static double poly_length_uc(double *p) { // unconnected
+    int k;
+    int len = floor(p[0]);
+    double ret = 0;
+    for(k=0;k<len*4;k+=4) {
+        ret += line_length(p[k+1],p[k+2],p[k+3],p[k+4]);
+    }
+    return ret;
+}
+
+static double complex av_genutil_poly_uc(double t, double *p) { // unconnected
+    int len = floor(p[0]);
+    int k;
+    double next;
+    double complex ret;
+    double length = poly_length_uc(p);
+    double _t = fmod(t,length);
+    //double _t = t;
+    for(k=0;k<len*4;k+=4) {
+        ret = av_genutil_line_p(_t,p[k+1],p[k+2],p[k+3],p[k+4],&next);
+        if(next == 0) break;
+        _t-=next;
+    }
+    return ret;
+}
 
 double complex av_genutil_line(double t, double *p) {
     double dummy;
@@ -1170,6 +1195,155 @@ static double complex gexp(double complex z, double *p) {
 static void genutil_exp(GenutilFuncParams *params, int n, AVFrame *in) {
     genutil_attr(params,in,gexp);
 }
+/***** lindenmeyer ***********/
+
+static char *parseForm(GenutilFuncParams * params) {
+    int iter = params->p[0];
+    int k,i,j;
+    GenutilGrowString *ss = av_genutil_growstring_new();
+    av_genutil_growstring_append(ss,params->s[0]);
+    for(k=0;k<iter;k++) {
+        char *old = strdup(ss->str);
+        av_genutil_growstring_reset(ss);
+        size_t len = strlen(old);
+        for(i=0;i<len;i++) {
+            int found = 0;
+            j=1;
+            while(params->s[j]) {
+                char *rule = params->s[j];
+                j++;
+                if(rule[0] == old[i]) {
+                    found = 1;
+                    av_genutil_growstring_append(ss,&rule[2]);
+                }
+            }
+            if(!found) {
+                char b[2];
+                b[0] = old[i];
+                b[1] = 0;
+                av_genutil_growstring_append(ss,b);
+            }
+        }
+        free(old);
+    }
+    char *ret = strdup(ss->str);
+    av_genutil_growstring_free(ss);
+    return ret;
+}
+static int genutil_count_moves(char *str) {
+    int k;
+    int len = strlen(str);
+    int ret = 0;
+    for(k=0;k<len;k++) {
+       if(str[k] == 'F' || str[k] == 'G') {
+           ret++;
+       } 
+    }
+    return ret;
+}
+
+static int genutil_count_brackets(char *str) {
+    int k;
+    int len = strlen(str);
+    int max = 0;
+    int current = 0;
+    for(k=0;k<len;k++) {
+       if(str[k] == '(') {
+           current++;
+           if(current > max) max = current;
+       }
+       if(str[k] == ')') current--;
+
+    }
+    return max;
+}
+
+static void genutil_interpreter_b(char *str, double alpha, double flen, double *p, int b) {
+    double x[b*2]; 
+    double y[b*2];
+    double phi[b*2];
+    x[0] = 0;
+    y[0] = 0;
+    phi[0] = 0;
+    int k;
+    int len = strlen(str);
+    int pos = 1;
+    int br = 0;
+    for(k=0;k<len;k++) {
+        switch(str[k]) {
+            case '(':
+            case '[':
+                br++;
+                x[br] = x[br-1];
+                y[br] = y[br-1];
+                phi[br] = phi[br-1];
+                break;
+            case ')': br--;break;
+            case '+': phi[br]+= (alpha*M_PI/180);break;
+            case '-': phi[br]-= (alpha*M_PI/180);break;
+            case 'F': 
+            case 'G':
+              p[pos++] = x[br];
+              p[pos++] = y[br];
+              x[br] += sin(phi[br])*flen;
+              y[br] += cos(phi[br])*flen;
+              p[pos++] = x[br];
+              p[pos++] = y[br];
+              break;
+            default:
+              break;
+        }
+    }
+;
+}
+
+static void genutil_interpreter_n(char *str, double alpha, double flen, double *p) {
+    double x,y,phi;
+    x=0;y=0;phi=0;
+    int k;
+    int len = strlen(str);
+    int pos = 1;
+    p[pos++] = x;
+    p[pos++] = y;
+
+    for(k=0;k<len;k++) {
+        switch(str[k]) {
+            case '+': phi+= (alpha*M_PI/180);break;
+            case '-': phi-= (alpha*M_PI/180);break;
+            case 'F': 
+            case 'G':
+              x += sin(phi)*flen;
+              y += cos(phi)*flen;
+              p[pos++] = x;
+              p[pos++] = y;
+              break;
+            default:
+              break;
+        }
+    }
+}
+
+static void genutil_lindenmeyer(GenutilFuncParams *params, int n, AVFrame *in) {
+    char *str = parseForm(params);
+    av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
+
+    int len = genutil_count_moves(str);
+    double angle = params->p[1];
+    double *p = calloc(len*5, sizeof(double));
+    p[0] = len;
+    int max_brackets = genutil_count_brackets(str);
+    if(max_brackets == 0) {
+        genutil_interpreter_n(str,angle,params->p[2],p);
+        params->p = p;
+        colored_curve(params,av_genutil_poly,in);
+    } else {
+        genutil_interpreter_b(str,angle,params->p[2],p,max_brackets);
+        params->p = p;
+        colored_curve(params,av_genutil_poly_uc,in);
+    }
+    free(str);
+    free(p);
+}
 
 static GenutilFunc gfuncs[] = {
     {"hypo",genutil_hypo},
@@ -1206,6 +1380,7 @@ static GenutilFunc gfuncs[] = {
     {"hopa",genutil_hopa},
     {"exp",genutil_exp},
     {"hilbert",genutil_hilbert},
+    {"lindenmeyer",genutil_lindenmeyer},
     {"addoid",genutil_addoid},
     {"phypo",genutil_phypo},
     {"pkardiods",genutil_pkardioids},
@@ -1593,5 +1768,47 @@ void av_genutil_replace_char(char *str, char needle, char rep) {
         if(str[k] == needle) str[k] = rep;
         k++;
     }
+}
+
+GenutilGrowString *av_genutil_growstring_new() {
+    GenutilGrowString *ss = malloc(sizeof(GenutilGrowString));
+    if(NULL == ss) goto fail;
+    ss->str = malloc(SMARTY_SIZE_INIT);
+    if(NULL == ss->str ) goto fail;
+    ss->end = ss->str;
+    *ss->end = '\0';
+    ss->size = SMARTY_SIZE_INIT;
+    return ss; 
+
+    fail:
+       free(ss);
+       return NULL;
+}
+
+void av_genutil_growstring_append(GenutilGrowString *ss, char *suffix) {
+    while(*suffix != '\0'){
+      if(! ((ss->end - ss->str) < (ss->size-1)) ){
+        size_t offset = ss->end - ss->str;
+        char* newstr = realloc(ss->str, (ss->size * 2) );
+        if(NULL == newstr){ ss->end--; break; }
+        ss->str = newstr; 
+        ss->size = ss->size * 2;
+        ss->end = ss->str + offset; 
+      }
+      *(ss->end) = *suffix;
+      suffix++;
+      ss->end++;
+    }
+    *(ss->end) = '\0';
+}
+
+void av_genutil_growstring_reset(GenutilGrowString *ss) {
+    ss->end = ss->str;
+    *ss->end = '\0';
+}
+
+void av_genutil_growstring_free(GenutilGrowString *ss) {
+    free(ss->str);
+    free(ss);
 }
 

@@ -44,6 +44,7 @@ typedef struct PlotCurveContext {
     //void (*ffunc)(struct PlotCurveContext*,int,AVFrame *in);
     void (*ffunc)(GenutilFuncParams*,int,AVFrame *in);
     double p[40];
+    char *s[40];
     const char *nf[20];
     double (*nfunc[20])(int,double*);
     double np[20][NMAXPARAMS];
@@ -96,6 +97,16 @@ static const AVOption plotcurve_options[] = {
     { "p07","p07",   OFFSET(p[7]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p08","p08",   OFFSET(p[8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p09","p09",   OFFSET(p[9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "s0", "s0",  OFFSET(s[0]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "s1", "s1",  OFFSET(s[1]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "s2", "s2",  OFFSET(s[2]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "s3", "s3",  OFFSET(s[3]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "s4", "s4",  OFFSET(s[4]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "s5", "s5",  OFFSET(s[5]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "s6", "s6",  OFFSET(s[6]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "s7", "s7",  OFFSET(s[7]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "s8", "s8",  OFFSET(s[8]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "s9", "s9",  OFFSET(s[9]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "fx","fx",       OFFSET(fx),     AV_OPT_TYPE_DOUBLE, {.dbl = 100}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "fy","fy",       OFFSET(fy),     AV_OPT_TYPE_DOUBLE, {.dbl = 100}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "x","x",       OFFSET(x),     AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -378,6 +389,7 @@ static int plotcurve_config_props(AVFilterLink *inlink)
 static void make_params(PlotCurveContext *plotcurve, GenutilFuncParams *params, int frame_number) {
     int k,j;
     for(k=0;k<40;k++) params->p[k] = plotcurve->p[k];
+    for(k=0;k<10;k++) params->s[k] = plotcurve->s[k];
     for(k=0;k<3;k++) params->cfunc[k] = plotcurve->cfunc[k];
     for(k=0;k<3;k++) {
         for(j=0;j<CMAXPARAMS;j++) params->cp[k][j] = plotcurve->cp[k][j];
@@ -395,6 +407,7 @@ static void make_params(PlotCurveContext *plotcurve, GenutilFuncParams *params, 
     params->y = plotcurve->y;
     params->rot = plotcurve->rot;
     params->form = plotcurve->form;
+    params->ctx = plotcurve->ctx;
 
     double np[10][NMAXPARAMS];
     for(k=0;k<10;k++) {

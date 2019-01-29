@@ -8,6 +8,7 @@
 #include <math.h>
 #include <string.h>
 #include "libavutil/frame.h"
+#include "libavfilter/avfilter.h"
 
 #define PFUNC(x) double complex (*x)(double t, double *p)
 
@@ -18,9 +19,25 @@
 
 enum { Y, U, V, A };
 
+typedef struct {
+  char * str; // a null terminated C string
+  char * end; // a pointer to the null byte, to be able to repeatedly append
+              // without using strlen() every time.
+  size_t size; // currently allocated size for *str, so we know when we 
+               // need to grow.
+} GenutilGrowString;
+
+#define SMARTY_SIZE_INIT 100
+
+GenutilGrowString *av_genutil_growstring_new(void);
+void av_genutil_growstring_append(GenutilGrowString *ss, char *suffix);
+void av_genutil_growstring_reset(GenutilGrowString *ss);
+void av_genutil_growstring_free(GenutilGrowString *ss);
+
 typedef struct GenutilFuncParams {
     // func params
     double *p;
+    char *s[10];
     //color
     double (*cfunc[3])(double,double*);
     double cp[3][10];
@@ -49,6 +66,9 @@ typedef struct GenutilFuncParams {
     int count;
     int layers;
     int form;
+
+    AVFilterContext *ctx;
+
 } GenutilFuncParams;
 
 double complex av_genutil_rotate(double complex z, double phi);
