@@ -46,7 +46,7 @@ typedef struct FracFuncParams {
     double *p;
     int ifcmode;
     long double complex (*ifunc)(long double complex,long double*);
-    double ip[10];
+    long double ip[10];
     double (*cfunc[3])(double,double*);
     double cp[3][10];
     int cmod;
@@ -60,7 +60,7 @@ typedef struct FracContext {
     double p[40];
     const char *ifc;
     long double complex (*ifunc)(long double complex,long double*);
-    double ip[10];
+    long double ip[10];
     int ifcmode;
     const char *nf[10];
     double np[10][10];

@@ -55,6 +55,7 @@ typedef struct PlotCurveContext {
     double cp[3][CMAXPARAMS];
     const char *c[3];
     int cmod; // YUV = 0, RGB = 1, HSV = 2
+    uint8_t colors[10][4];
     double fx;
     double fy;
     double x;
@@ -97,6 +98,16 @@ static const AVOption plotcurve_options[] = {
     { "p07","p07",   OFFSET(p[7]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p08","p08",   OFFSET(p[8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "p09","p09",   OFFSET(p[9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "color0", "color0",  OFFSET(colors[0]),   AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "color1", "color1",  OFFSET(colors[1]),   AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "color2", "color2",  OFFSET(colors[2]),   AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "color3", "color3",  OFFSET(colors[3]),   AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "color4", "color4",  OFFSET(colors[4]),   AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "color5", "color5",  OFFSET(colors[5]),   AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "color6", "color6",  OFFSET(colors[6]),   AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "color7", "color7",  OFFSET(colors[7]),   AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "color8", "color8",  OFFSET(colors[8]),   AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
+    { "color9", "color9",  OFFSET(colors[9]),   AV_OPT_TYPE_COLOR, {.str="white"}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "s0", "s0",  OFFSET(s[0]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "s1", "s1",  OFFSET(s[1]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "s2", "s2",  OFFSET(s[2]),   AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
@@ -299,6 +310,9 @@ static av_cold int plotcurve_init(AVFilterContext *ctx)
         } 
     }
     
+    for(k=0;k<10;k++) {
+        av_log(ctx, AV_LOG_INFO, "color %d is %d %d %d\n", k, plotcurve->colors[k][0],plotcurve->colors[k][1],plotcurve->colors[k][2]);
+    }
 
     if(plotcurve->ff) {
         av_genutil_parse_ffunc(plotcurve->ff,plotcurve->p,&plotcurve->ffunc); 
@@ -386,6 +400,26 @@ static int plotcurve_config_props(AVFilterLink *inlink)
     return 0;
 }
 
+static void convert_colors(PlotCurveContext *plotcurve,GenutilFuncParams *params) {
+    int k;
+    for(k=0;k<10;k++) {
+        double r,g,b;
+        r = ((double)plotcurve->colors[k][0])/255.0;
+        g = ((double)plotcurve->colors[k][1])/255.0;
+        b = ((double)plotcurve->colors[k][2])/255.0;
+        if(plotcurve->is_rgb) {
+            params->colors[k][0] = r;
+            params->colors[k][1] = g;
+            params->colors[k][2] = b;
+        } else {
+            params->colors[k][0] = r * 0.299000  + g * 0.587000  + b * 0.114000;
+            params->colors[k][1] = r * -0.168736 + g * -0.331264 + b * 0.500000  + 0.5;
+            params->colors[k][2] = r * 0.500000  + g * -.418688  + b * -0.081312 + 0.5;  
+        }
+    }
+
+}
+
 static void make_params(PlotCurveContext *plotcurve, GenutilFuncParams *params, int frame_number) {
     int k,j;
     for(k=0;k<40;k++) params->p[k] = plotcurve->p[k];
@@ -415,6 +449,7 @@ static void make_params(PlotCurveContext *plotcurve, GenutilFuncParams *params, 
             np[k][j] = plotcurve->np[k][j];
         }
     }
+    convert_colors(plotcurve,params);
 
     const char *format = "%s %d %s %s %d";
     int i=0;

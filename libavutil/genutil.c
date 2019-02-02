@@ -398,19 +398,122 @@ void debug(GenutilFuncParams *params, int frame_number, AVFrame *in, int plane) 
         av_genutil_draw_number(k*100+20, params->h-35, params->p[k], in, plane);
     }
     for(k=0;k<3;k++) {
-        //av_genutil_draw_number(k*100+20, params->h-16, params->cp[0][k], in, plane);
+        av_genutil_draw_number(k*100+20, params->h-16, params->colors[0][k], in, plane);
     }
     av_genutil_draw_int(params->w-50, params->h-35, frame_number, in, plane);
+}
+#define SWAP(x,y)   { \
+       int j; \
+       j=x; x=y; y=j; \
+       }
+
+static void c_line(GenutilFuncParams *params, double *r, double *color, AVFrame *in) {
+    double dx;
+    double dy;
+    double gradient;
+    int x0,x1,y0,y1;
+    int steep;
+    if(params->rot != 0) {
+        double complex z0 = av_genutil_rotate(r[0]+I*r[1],params->rot);
+        double complex z1 = av_genutil_rotate(r[2]+I*r[3],params->rot);
+        r[0] = creal(z0);
+        r[1] = cimag(z0);
+        r[2] = creal(z1);
+        r[3] = cimag(z1);
+    }
+    x0 = floor(params->fx*r[0] + params->w/2) + params->x;
+    y0 = floor(params->fy*r[1] + params->h/2) + params->y;
+    x1 = floor(params->fx*r[2] + params->w/2) + params->x;
+    y1 = floor(params->fy*r[3] + params->h/2) + params->y;
+    steep = abs(y1 - y0) > abs(x1 - x0);
+    if (steep) {
+        SWAP(x0,y0);
+        SWAP(x1,y1);
+    }
+    if (x0 > x1) {
+        SWAP(x0,x1);
+        SWAP(y0,y1);
+    }
+
+    dx = x1 - x0;
+    dy = y1 - y0;
+    gradient = dy / dx;
+
+    for(int k = x0;k<=x1;k++) {
+        double y = y0 + (k-x0) * gradient;
+        for(int plane = 0;plane <3;plane++) {
+            if(steep) {
+                av_plot_form(params->form,floor(y),k,color[plane],params->w,params->h,in->linesize[plane],in->data[plane]);
+            } else {
+                av_plot_form(params->form,k,floor(y),color[plane],params->w,params->h,in->linesize[plane],in->data[plane]);
+            }
+        }
+    }
+}
+
+static void c_line_c(GenutilFuncParams *params, double *r, double *t, double delta, AVFrame *in) {
+    double dx;
+    double dy;
+    double gradient;
+    int x0,x1,y0,y1;
+    int steep;
+    
+    if(params->rot != 0) {
+        double complex z0 = av_genutil_rotate(r[0]+I*r[1],params->rot);
+        double complex z1 = av_genutil_rotate(r[2]+I*r[3],params->rot);
+        r[0] = creal(z0);
+        r[1] = cimag(z0);
+        r[2] = creal(z1);
+        r[3] = cimag(z1);
+    }
+    x0 = floor(params->fx*r[0] + params->w/2) + params->x;
+    y0 = floor(params->fy*r[1] + params->h/2) + params->y;
+    x1 = floor(params->fx*r[2] + params->w/2) + params->x;
+    y1 = floor(params->fy*r[3] + params->h/2) + params->y;
+    steep = abs(y1 - y0) > abs(x1 - x0);
+    if (steep) {
+        SWAP(x0,y0);
+        SWAP(x1,y1);
+    }
+    if (x0 > x1) {
+        SWAP(x0,x1);
+        SWAP(y0,y1);
+    }
+
+    dx = x1 - x0;
+    dy = y1 - y0;
+    //delta = delta*sqrt(dx*dx+dy*dy)/dx;
+    gradient = dy / dx;
+    double colors[3];
+    for(int k = x0;k<=x1;k++) {
+        av_genutil_get_color(params->cfunc, params->cp,*t,params->cmod, params->is_rgb, colors);
+        double y = y0 + (k-x0) * gradient;
+        for(int plane = 0;plane <3;plane++) {
+            if(steep) {
+                av_plot_form(params->form,floor(y),k,colors[plane],params->w,params->h,in->linesize[plane],in->data[plane]);
+            } else {
+                av_plot_form(params->form,k,floor(y),colors[plane],params->w,params->h,in->linesize[plane],in->data[plane]);
+            }
+        }
+        *t = *t + delta;
+    }
 }
 
 static void colored_curve(GenutilFuncParams *params, PFUNC(f), AVFrame *in) {
     double t = params->start;
     while(t<params->start+params->length) {
         double colors[3];
+        double complex _z = f(t,params->p);
+        double complex z = av_genutil_rotate(_z,params->rot);
+        int x = floor(params->fx*creal(z) + params->w/2) + params->x;
+        int y = floor(params->fy*cimag(z) + params->h/2) + params->y;
         av_genutil_get_color(params->cfunc, params->cp,t,params->cmod, params->is_rgb, colors);
-        drawPoint(params,in,0,t,f,colors[0]);
-        drawPoint(params,in,1,t,f,colors[1]);
-        drawPoint(params,in,2,t,f,colors[2]);
+        av_plot_form(params->form,x,y,colors[0],params->w,params->h,in->linesize[0],in->data[0]);
+        av_plot_form(params->form,x,y,colors[1],params->w,params->h,in->linesize[1],in->data[1]);
+        av_plot_form(params->form,x,y,colors[2],params->w,params->h,in->linesize[2],in->data[2]);
+        //drawPoint(params,in,0,t,f,colors[0]);
+        //drawPoint(params,in,1,t,f,colors[1]);
+        //drawPoint(params,in,2,t,f,colors[2]);
         t+=params->delta;
     }
 }
@@ -1072,7 +1175,7 @@ static void genutil_circs(GenutilFuncParams *params, int n, AVFrame *in) {
     }
 } 
 
-
+// ============ AFFIN / FLAMES (later) =======/
 static double complex affin(double complex z, double *p) {
     double x = p[0] * creal(z) + p[1] * cimag(z) + p[2];
     double y = p[3] * creal(z) + p[4] * cimag(z) + p[5];
@@ -1101,10 +1204,15 @@ static void genutil_frac(GenutilFuncParams *params, int n, AVFrame *in) {
         else if(r<p1) z1 = affin(z,w1);
         else if(r<p2) z1 = affin(z,w2);
         else z1 = affin(z,w3);
-        plot_point(params,in,0,creal(z1) - I * cimag(z1),1);
+        if(k>20)
+            plot_point(params,in,0,creal(z1) - I * cimag(z1),1);
         z = z1;
     }
 }
+
+
+
+// ================= other maps (mira hopalong ... ) =================/
 static void genutil_attr(GenutilFuncParams *params, AVFrame *in, double complex (*f)(double complex, double*)) {
     double *p = params->p;
     int len = floor(p[0]);
@@ -1122,7 +1230,6 @@ static void genutil_attr(GenutilFuncParams *params, AVFrame *in, double complex 
         z = z1;
     }
 }
-
 static double miraf(double x, double a) {
     return a*x-(1-a)*(2*x*x/(1+x*x));
 }
@@ -1258,6 +1365,7 @@ static int genutil_count_brackets(char *str) {
     return max;
 }
 
+
 static void genutil_interpreter_b(char *str, double alpha, double flen, double *p, int b) {
     double *x = calloc(b*2,sizeof(double));
     double *y = calloc(b*2,sizeof(double));
@@ -1347,6 +1455,218 @@ static void genutil_lindenmeyer(GenutilFuncParams *params, int n, AVFrame *in) {
     free(p);
 }
 
+static void genutil_interpreter_c(GenutilFuncParams *params,char *str, int b, double end, AVFrame *in) {
+    double alpha = params->p[1];
+    
+    double *x = calloc(b*2,sizeof(double));
+    double *y = calloc(b*2,sizeof(double));
+    double *phi = calloc(b*2,sizeof(double));
+    double r[4];
+    x[0] = 0;
+    y[0] = 0;
+    phi[0] = 0;
+    int k;
+    int len = strlen(str);
+    int br = 0;
+    int col = 0;
+    int count=0;
+    for(k=0;k<len;k++) {
+        switch(str[k]) {
+            case '(':
+            case '[':
+                br++;
+                x[br] = x[br-1];
+                y[br] = y[br-1];
+                phi[br] = phi[br-1];
+                params->form = 7-br;
+                break;
+            case ')': br--;break;
+            case '+': phi[br]+= (alpha*M_PI/180);break;
+            case '-': phi[br]-= (alpha*M_PI/180);break;
+            case '0': col = 0; break;
+            case '1': col = 1; break;
+            case '2': col = 2; break;
+            case '3': col = 3; break;
+            case '4': col = 4; break;
+            case '5': col = 5; break;
+            case '6': col = 6; break;
+            case '7': col = 7; break;
+            case '8': col = 8; break;
+            case '9': col = 9; break;
+            //case 'a': params->form = 0; break;
+            //case 'b': params->form = 1; break;
+            //case 'c': params->form = 5; break;
+            //case 'd': params->form = 7; break;
+            case 'F': 
+              r[0] = x[br];
+              r[1] = y[br];
+              x[br] += sin(phi[br])*params->p[2];
+              y[br] += cos(phi[br])*params->p[2];
+              r[2] = x[br];
+              r[3] = y[br];
+              c_line(params,r,params->colors[col],in);
+              count++;
+              break;
+            case 'G':
+              r[0] = x[br];
+              r[1] = y[br];
+              x[br] += sin(phi[br])*params->p[3];
+              y[br] += cos(phi[br])*params->p[3];
+              r[2] = x[br];
+              r[3] = y[br];
+              c_line(params,r,params->colors[col],in);
+              count++;
+              break;
+            default:
+              break;
+        }
+        if(end>=0 && count>end) break;
+    }
+    free(x);
+    free(y);
+    free(phi);
+}
+
+static void genutil_lindenmeyer_fast(GenutilFuncParams *params, int n, AVFrame *in) {
+    char *str = parseForm(params);
+    av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
+    int max_brackets = genutil_count_brackets(str);
+    genutil_interpreter_c(params,str,max_brackets,-1,in);
+    free(str);
+}
+
+
+static void genutil_lindenmeyer_fe(GenutilFuncParams *params, int n, AVFrame *in) {
+    char *str = parseForm(params);
+    av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
+    int max_brackets = genutil_count_brackets(str);
+    genutil_interpreter_c(params,str,max_brackets,params->p[4],in);
+    free(str);
+}
+
+static const char* pats[] = {"","-","--","---","+","++","+++","++++"};
+static const int patlen[] = {0,1,2,3,1,2,3,4};
+
+static const char* pats1[] = {"","-","--","---","----","-----","------","-------","+","++","+++","++++","+++++","++++++","+++++++","++++++++"};
+static const int patlen1[] = {0,1,2,3,4,5,6,7,1,2,3,4,5,6,7,8};
+
+static int rndf(int k, double *p) {
+    return rand();
+}
+
+static int testf(int k, double *p) {
+    return k*p[0];
+}
+
+static int testsin(int k, double *p) {
+    return ((sin(k*p[0])+1)/2) * 8;
+}
+
+static int testsin2(int k, double *p) {
+    return ((sin(k*p[0])+1)/2) * 16;
+}
+
+static char *genrnd(int len, int (*f)(int,double*),double *p) {
+    char *ret = calloc(len*6,sizeof(char));
+    int pos = 0;
+    ret[pos++] = 'F';
+    for(int k=0;k<len;k++) {
+        int rnd = f(k,p)%8;
+        for(int j=0;j<patlen[rnd];j++) {
+            ret[pos++]=pats[rnd][j];
+        }
+        ret[pos++]= rand()%8+48;;
+        ret[pos++]='F';
+    }
+    return ret;
+}
+
+static char *genrnd2(int len, int (*f)(int,double*),double *p) {
+    char *ret = calloc(len*12,sizeof(char));
+    int pos = 0;
+    ret[pos++] = 'F';
+    for(int k=0;k<len;k++) {
+        int rnd = f(k,p)%16;
+        for(int j=0;j<patlen1[rnd];j++) {
+            ret[pos++]=pats1[rnd][j];
+        }
+        ret[pos++]= rand()%8+48;;
+        ret[pos++]='F';
+    }
+    return ret;
+}
+
+static void genutil_interpreter_cf(GenutilFuncParams *params,char *str, double end, AVFrame *in) {
+    double alpha = params->p[1];
+    
+    double r[4];
+    double x = 0;
+    double y = 0;
+    double phi = 0;
+    int k;
+    int len = strlen(str);
+    int count=0;
+    double t = 0;
+    for(k=0;k<len;k++) {
+        switch(str[k]) {
+            case '+': phi+= (alpha*M_PI/180);break;
+            case '-': phi-= (alpha*M_PI/180);break;
+            case 'F': 
+              r[0] = x;
+              r[1] = y;
+              x += sin(phi)*params->p[2];
+              y += cos(phi)*params->p[2];
+              r[2] = x;
+              r[3] = y;
+              c_line_c(params,r,&t,params->delta,in);
+              count++;
+              break;
+            case 'G':
+              r[0] = x;
+              r[1] = y;
+              x += sin(phi)*params->p[3];
+              y += cos(phi)*params->p[3];
+              r[2] = x;
+              r[3] = y;
+              c_line_c(params,r,&t,params->delta,in);
+              count++;
+              break;
+            default:
+              break;
+        }
+        if(end>=0 && count>end) break;
+    }
+}
+
+static void genutil_lindenmeyer_t1(GenutilFuncParams *params, int n, AVFrame *in) {
+    char *str = genrnd(floor(params->p[0]),testsin,&params->p[4]);
+    av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
+    genutil_interpreter_cf(params,str,-1,in);
+    free(str);
+}
+
+static void genutil_lindenmeyer_t2(GenutilFuncParams *params, int n, AVFrame *in) {
+    char *str = genrnd2(floor(params->p[0]),testsin2,&params->p[4]);
+    av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
+    genutil_interpreter_cf(params,str,-1,in);
+    free(str);
+}
+
+static void genutil_lindenmeyer_rnd(GenutilFuncParams *params, int n, AVFrame *in) {
+    srand(floor(fabs(params->p[4])));
+    char *str = genrnd(floor(params->p[0]),rndf,NULL);
+    av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
+    genutil_interpreter_cf(params,str,-1,in);
+    free(str);
+}
+
+static void genutil_lindenmeyer_fastc(GenutilFuncParams *params, int n, AVFrame *in) {
+    char *str = parseForm(params);
+    av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
+    genutil_interpreter_cf(params,str,-1,in);
+    free(str);
+}
+
 static GenutilFunc gfuncs[] = {
     {"hypo",genutil_hypo},
     {"lissg",genutil_lissg},
@@ -1383,6 +1703,12 @@ static GenutilFunc gfuncs[] = {
     {"exp",genutil_exp},
     {"hilbert",genutil_hilbert},
     {"lindenmeyer",genutil_lindenmeyer},
+    {"lmfast",genutil_lindenmeyer_fast},
+    {"lmefast",genutil_lindenmeyer_fe},
+    {"lmfastc",genutil_lindenmeyer_fastc},
+    {"lmrnd",genutil_lindenmeyer_rnd},
+    {"lmtest",genutil_lindenmeyer_t1},
+    {"lmtest2",genutil_lindenmeyer_t2},
     {"addoid",genutil_addoid},
     {"phypo",genutil_phypo},
     {"pkardiods",genutil_pkardioids},

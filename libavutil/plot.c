@@ -238,30 +238,40 @@ void av_plot_int_p(int x, int y, int n, uint8_t *color, int w, int h, int linesi
 }
 
 
+static void plot_rect(PF(plotf),int x0, int x1,int y0, int y1, double a, int w, int h, int linesize, uint8_t *buf) {
+    for(int x=x0;x<=x1;x++)
+        for(int y=y0;y<=y1;y++)
+            plotf(x,y,a,w,h,linesize,buf);
+}
+
 
 static void plot_form(PF(plotf),int form, int x, int y, double a, int w, int h,int linesize, uint8_t *buf) {
-    int i,j;
     switch(form) {
-        case 0: plotf(x,y,a,w,h,linesize,buf);
-                break;
         case 1: plotf(x,y,a,w,h,linesize,buf);
+                break;
+        case 2: plotf(x,y,a,w,h,linesize,buf);
                 plotf(x+1,y,a,w,h,linesize,buf);
                 plotf(x,y+1,a,w,h,linesize,buf);
                 plotf(x+1,y+1,a,w,h,linesize,buf);
                 break;
-        case 2: plotf(x,y,a,w,h,linesize,buf);
+        case 3: plot_rect(plotf,x-1,x+1,y-1,y+1,a,w,h,linesize,buf);break;
+        case 4: plot_rect(plotf,x-1,x+2,y-1,y+2,a,w,h,linesize,buf);break;
+        case 5: plot_rect(plotf,x-2,x+2,y-2,y+2,a,w,h,linesize,buf);break;
+        case 6: plot_rect(plotf,x-3,x+2,y-3,y+2,a,w,h,linesize,buf);break;
+        case 7: plot_rect(plotf,x-3,x+3,y-3,y+3,a,w,h,linesize,buf);break;
+        case 8: plotf(x,y,a,w,h,linesize,buf);
                 plotf(x+1,y,a,w,h,linesize,buf);
                 break;
-        case 3: plotf(x,y,a,w,h,linesize,buf);
+        case 9: plotf(x,y,a,w,h,linesize,buf);
                 plotf(x,y+1,a,w,h,linesize,buf);
                 break;
-        case 4: plotf(x,y,a,w,h,linesize,buf);
+        case 10: plotf(x,y,a,w,h,linesize,buf);
                 plotf(x-1,y,a,w,h,linesize,buf);
                 plotf(x+1,y,a,w,h,linesize,buf);
                 plotf(x,y-1,a,w,h,linesize,buf);
                 plotf(x,y+1,a,w,h,linesize,buf);
                 break;
-        case 5: plotf(x,y,a,w,h,linesize,buf);
+        case 11: plotf(x,y,a,w,h,linesize,buf);
                 plotf(x-1,y,a,w,h,linesize,buf);
                 plotf(x+1,y,a,w,h,linesize,buf);
                 plotf(x,y-1,a,w,h,linesize,buf);
@@ -269,13 +279,13 @@ static void plot_form(PF(plotf),int form, int x, int y, double a, int w, int h,i
                 plotf(x+1,y+1,a,w,h,linesize,buf);
                 plotf(x-1,y-1,a,w,h,linesize,buf);
                 break;
-        case 6: plotf(x,y,a,w,h,linesize,buf);
+        case 12: plotf(x,y,a,w,h,linesize,buf);
                 plotf(x+1,y,a,w,h,linesize,buf);
                 plotf(x-1,y,a,w,h,linesize,buf);
                 plotf(x+2,y,a,w,h,linesize,buf);
                 plotf(x-2,y,a,w,h,linesize,buf);
                 break;
-        case 7: plotf(x,y,a,w,h,linesize,buf);
+        case 13: plotf(x,y,a,w,h,linesize,buf);
                 plotf(x+1,y,a,w,h,linesize,buf);
                 plotf(x-1,y,a,w,h,linesize,buf);
                 plotf(x+2,y,a,w,h,linesize,buf);
@@ -294,17 +304,13 @@ static void plot_form(PF(plotf),int form, int x, int y, double a, int w, int h,i
 //  0XXX0
 //  00X00
                 break;
-        case 8: plotf(x,y,a,w,h,linesize,buf);
+        case 14: plotf(x,y,a,w,h,linesize,buf);
                 plotf(x+4,y,a,w,h,linesize,buf);
                 plotf(x-4,y,a,w,h,linesize,buf);
                 plotf(x+8,y,a,w,h,linesize,buf);
                 plotf(x-8,y,a,w,h,linesize,buf);
                 plotf(x+12,y,a,w,h,linesize,buf);
                 plotf(x-12,y,a,w,h,linesize,buf);
-                break;
-        case 9: for(i=-2;i<=2;i++)
-                    for(j=-2;j<=2;j++) 
-                        plotf(x+i,y+j,a,w,h,linesize,buf);
                 break;
         default:plotf(x,y,a,w,h,linesize,buf);
                 break;

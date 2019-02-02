@@ -42,6 +42,8 @@ typedef struct GenutilFuncParams {
     double (*cfunc[3])(double,double*);
     double cp[3][10];
     int cmod;
+    // color values
+    double colors[10][4];
     // curve params
     double delta;
     double start;
