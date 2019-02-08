@@ -89,31 +89,6 @@ double complex av_genutil_poly(double t, double *p) {
     }
     return ret;
 }
-static double poly_length_uc(double *p) { // unconnected
-    int k;
-    int len = floor(p[0]);
-    double ret = 0;
-    for(k=0;k<len*4;k+=4) {
-        ret += line_length(p[k+1],p[k+2],p[k+3],p[k+4]);
-    }
-    return ret;
-}
-
-static double complex av_genutil_poly_uc(double t, double *p) { // unconnected
-    int len = floor(p[0]);
-    int k;
-    double next;
-    double complex ret;
-    double length = poly_length_uc(p);
-    double _t = fmod(t,length);
-    //double _t = t;
-    for(k=0;k<len*4;k+=4) {
-        ret = av_genutil_line_p(_t,p[k+1],p[k+2],p[k+3],p[k+4],&next);
-        if(next == 0) break;
-        _t-=next;
-    }
-    return ret;
-}
 
 double complex av_genutil_line(double t, double *p) {
     double dummy;
@@ -1337,17 +1312,6 @@ static char *parseForm(GenutilFuncParams * params) {
     av_genutil_growstring_free(ss);
     return ret;
 }
-static int genutil_count_moves(char *str) {
-    int k;
-    int len = strlen(str);
-    int ret = 0;
-    for(k=0;k<len;k++) {
-       if(str[k] == 'F' || str[k] == 'G') {
-           ret++;
-       } 
-    }
-    return ret;
-}
 
 static int genutil_count_brackets(char *str) {
     int k;
@@ -1365,97 +1329,7 @@ static int genutil_count_brackets(char *str) {
     return max;
 }
 
-
-static void genutil_interpreter_b(char *str, double alpha, double flen, double *p, int b) {
-    double *x = calloc(b*2,sizeof(double));
-    double *y = calloc(b*2,sizeof(double));
-    double *phi = calloc(b*2,sizeof(double));
-    x[0] = 0;
-    y[0] = 0;
-    phi[0] = 0;
-    int k;
-    int len = strlen(str);
-    int pos = 1;
-    int br = 0;
-    for(k=0;k<len;k++) {
-        switch(str[k]) {
-            case '(':
-            case '[':
-                br++;
-                x[br] = x[br-1];
-                y[br] = y[br-1];
-                phi[br] = phi[br-1];
-                break;
-            case ')': br--;break;
-            case '+': phi[br]+= (alpha*M_PI/180);break;
-            case '-': phi[br]-= (alpha*M_PI/180);break;
-            case 'F': 
-            case 'G':
-              p[pos++] = x[br];
-              p[pos++] = y[br];
-              x[br] += sin(phi[br])*flen;
-              y[br] += cos(phi[br])*flen;
-              p[pos++] = x[br];
-              p[pos++] = y[br];
-              break;
-            default:
-              break;
-        }
-    }
-    free(x);
-    free(y);
-    free(phi);
-}
-
-static void genutil_interpreter_n(char *str, double alpha, double flen, double *p) {
-    double x,y,phi;
-    x=0;y=0;phi=0;
-    int k;
-    int len = strlen(str);
-    int pos = 1;
-    p[pos++] = x;
-    p[pos++] = y;
-
-    for(k=0;k<len;k++) {
-        switch(str[k]) {
-            case '+': phi+= (alpha*M_PI/180);break;
-            case '-': phi-= (alpha*M_PI/180);break;
-            case 'F': 
-            case 'G':
-              x += sin(phi)*flen;
-              y += cos(phi)*flen;
-              p[pos++] = x;
-              p[pos++] = y;
-              break;
-            default:
-              break;
-        }
-    }
-}
-
-static void genutil_lindenmeyer(GenutilFuncParams *params, int n, AVFrame *in) {
-    char *str = parseForm(params);
-    av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
-
-    int len = genutil_count_moves(str);
-    double angle = params->p[1];
-    double *p = calloc(len*5, sizeof(double));
-    p[0] = len;
-    int max_brackets = genutil_count_brackets(str);
-    if(max_brackets == 0) {
-        genutil_interpreter_n(str,angle,params->p[2],p);
-        params->p = p;
-        colored_curve(params,av_genutil_poly,in);
-    } else {
-        genutil_interpreter_b(str,angle,params->p[2],p,max_brackets);
-        params->p = p;
-        colored_curve(params,av_genutil_poly_uc,in);
-    }
-    free(str);
-    free(p);
-}
-
-static void genutil_interpreter_c(GenutilFuncParams *params,char *str, int b, double end, AVFrame *in) {
+static void genutil_interpreter(GenutilFuncParams *params,char *str, int b, double end, int cf, AVFrame *in) {
     double alpha = params->p[1];
     
     double *x = calloc(b*2,sizeof(double));
@@ -1470,6 +1344,7 @@ static void genutil_interpreter_c(GenutilFuncParams *params,char *str, int b, do
     int br = 0;
     int col = 0;
     int count=0;
+    double t = 0;
     for(k=0;k<len;k++) {
         switch(str[k]) {
             case '(':
@@ -1478,6 +1353,7 @@ static void genutil_interpreter_c(GenutilFuncParams *params,char *str, int b, do
                 x[br] = x[br-1];
                 y[br] = y[br-1];
                 phi[br] = phi[br-1];
+                if(params->p[5] != 0)
                 params->form = 7-br;
                 break;
             case ')': br--;break;
@@ -1493,10 +1369,13 @@ static void genutil_interpreter_c(GenutilFuncParams *params,char *str, int b, do
             case '7': col = 7; break;
             case '8': col = 8; break;
             case '9': col = 9; break;
-            //case 'a': params->form = 0; break;
-            //case 'b': params->form = 1; break;
-            //case 'c': params->form = 5; break;
-            //case 'd': params->form = 7; break;
+            case 'a': params->form = 0; break;
+            case 'b': params->form = 1; break;
+            case 'c': params->form = 2; break;
+            case 'd': params->form = 3; break;
+            case 'e': params->form = 4; break;
+            case 'f': params->form = 5; break;
+            case 'g': params->form = 6; break;
             case 'F': 
               r[0] = x[br];
               r[1] = y[br];
@@ -1504,7 +1383,11 @@ static void genutil_interpreter_c(GenutilFuncParams *params,char *str, int b, do
               y[br] += cos(phi[br])*params->p[2];
               r[2] = x[br];
               r[3] = y[br];
-              c_line(params,r,params->colors[col],in);
+              if(cf) {
+                c_line_c(params,r,&t,params->delta,in);
+              } else {
+                c_line(params,r,params->colors[col],in);
+              }
               count++;
               break;
             case 'G':
@@ -1514,7 +1397,11 @@ static void genutil_interpreter_c(GenutilFuncParams *params,char *str, int b, do
               y[br] += cos(phi[br])*params->p[3];
               r[2] = x[br];
               r[3] = y[br];
-              c_line(params,r,params->colors[col],in);
+              if(cf) {
+                c_line_c(params,r,&t,params->delta,in);
+              } else {
+                c_line(params,r,params->colors[col],in);
+              }
               count++;
               break;
             default:
@@ -1527,20 +1414,11 @@ static void genutil_interpreter_c(GenutilFuncParams *params,char *str, int b, do
     free(phi);
 }
 
-static void genutil_lindenmeyer_fast(GenutilFuncParams *params, int n, AVFrame *in) {
+static void genutil_lindenmeyer_pal(GenutilFuncParams *params, int n, AVFrame *in) {
     char *str = parseForm(params);
     av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
     int max_brackets = genutil_count_brackets(str);
-    genutil_interpreter_c(params,str,max_brackets,-1,in);
-    free(str);
-}
-
-
-static void genutil_lindenmeyer_fe(GenutilFuncParams *params, int n, AVFrame *in) {
-    char *str = parseForm(params);
-    av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
-    int max_brackets = genutil_count_brackets(str);
-    genutil_interpreter_c(params,str,max_brackets,params->p[4],in);
+    genutil_interpreter(params,str,max_brackets,params->p[4],0,in);
     free(str);
 }
 
@@ -1596,7 +1474,7 @@ static char *genrnd2(int len, int (*f)(int,double*),double *p) {
     return ret;
 }
 
-static void genutil_interpreter_cf(GenutilFuncParams *params,char *str, double end, AVFrame *in) {
+static void genutil_interpreter_cfunc(GenutilFuncParams *params,char *str, double end, AVFrame *in) {
     double alpha = params->p[1];
     
     double r[4];
@@ -1641,14 +1519,14 @@ static void genutil_interpreter_cf(GenutilFuncParams *params,char *str, double e
 static void genutil_lindenmeyer_t1(GenutilFuncParams *params, int n, AVFrame *in) {
     char *str = genrnd(floor(params->p[0]),testsin,&params->p[4]);
     av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
-    genutil_interpreter_cf(params,str,-1,in);
+    genutil_interpreter_cfunc(params,str,-1,in);
     free(str);
 }
 
 static void genutil_lindenmeyer_t2(GenutilFuncParams *params, int n, AVFrame *in) {
     char *str = genrnd2(floor(params->p[0]),testsin2,&params->p[4]);
     av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
-    genutil_interpreter_cf(params,str,-1,in);
+    genutil_interpreter_cfunc(params,str,-1,in);
     free(str);
 }
 
@@ -1656,14 +1534,15 @@ static void genutil_lindenmeyer_rnd(GenutilFuncParams *params, int n, AVFrame *i
     srand(floor(fabs(params->p[4])));
     char *str = genrnd(floor(params->p[0]),rndf,NULL);
     av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
-    genutil_interpreter_cf(params,str,-1,in);
+    genutil_interpreter_cfunc(params,str,-1,in);
     free(str);
 }
 
-static void genutil_lindenmeyer_fastc(GenutilFuncParams *params, int n, AVFrame *in) {
+static void genutil_lindenmeyer_cfunc(GenutilFuncParams *params, int n, AVFrame *in) {
     char *str = parseForm(params);
     av_log(params->ctx, AV_LOG_DEBUG, "str: %s\n", str);
-    genutil_interpreter_cf(params,str,-1,in);
+    int max_brackets = genutil_count_brackets(str);
+    genutil_interpreter(params,str,max_brackets,params->p[4],1,in);
     free(str);
 }
 
@@ -1702,10 +1581,8 @@ static GenutilFunc gfuncs[] = {
     {"hopa",genutil_hopa},
     {"exp",genutil_exp},
     {"hilbert",genutil_hilbert},
-    {"lindenmeyer",genutil_lindenmeyer},
-    {"lmfast",genutil_lindenmeyer_fast},
-    {"lmefast",genutil_lindenmeyer_fe},
-    {"lmfastc",genutil_lindenmeyer_fastc},
+    {"lm",genutil_lindenmeyer_pal},
+    {"lmc",genutil_lindenmeyer_cfunc},
     {"lmrnd",genutil_lindenmeyer_rnd},
     {"lmtest",genutil_lindenmeyer_t1},
     {"lmtest2",genutil_lindenmeyer_t2},

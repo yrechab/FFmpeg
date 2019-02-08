@@ -54,8 +54,7 @@ typedef struct CGen2Context {
     double div;
     double rot;
     double rotn;
-    const char *mf;
-    double complex (*cfunc)(double complex, double*, double);
+    int mode;
     int hsub, vsub;             ///< chroma subsampling
     int planes;                 ///< number of planes
     int is_rgb;
@@ -118,7 +117,6 @@ static const AVOption cgen2_options[] = {
     { "div","div",   OFFSET(div),   AV_OPT_TYPE_DOUBLE, {.dbl =  1}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "rot","rot",   OFFSET(rot),   AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "rotn","rotn", OFFSET(rotn),  AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "mf",  "mf",   OFFSET(mf),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "n",  "n",     OFFSET(n),     AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "n00","n00",   OFFSET(np[0]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "n01","n01",   OFFSET(np[1]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -162,6 +160,7 @@ static const AVOption cgen2_options[] = {
     { "w18","w18",   OFFSET(wp[18]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "w19","w19",   OFFSET(wp[19]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "rgb","rgb",OFFSET(is_rgb), AV_OPT_TYPE_INT,    {.i64=0},    0,        1,        FLAGS },
+    { "mode","mode",OFFSET(mode), AV_OPT_TYPE_INT,    {.i64=0},    0,        4,        FLAGS },
     { "ofs","ofs",OFFSET(offset), AV_OPT_TYPE_INT,    {.i64=0},    0,     INT_MAX,        FLAGS },
     {NULL},
 };
@@ -178,13 +177,6 @@ typedef struct NFunc {
     const char *name;
     double (*f)(int n, double *p);
 } NFunc;
-
-typedef struct CFunc {
-    const char *name;
-    double complex (*f)(double complex z, double *p, double t);
-} CFunc;
-
-#define CFUNC(x) double complex (*x)(double complex z, double *p, double t)
 
 static double complex rotate(double complex z, double angle, double t) {
     if(angle == 0.0 && t == 0.0) return z;
@@ -230,25 +222,107 @@ static double complex tanr(double complex z, double *p, double t) {
     return ctan(rat(z,p,t));
 }
 
+static double complex v3_swirl(double complex z, double *p, double t) {
+    double r = cabs(z);
+    double x0 = creal(z);
+    double y0 = cimag(z);
+    double x = x0*sin(r*r)-y0*cos(r*r);
+    double y = x0*cos(r*r)-y0*sin(r*r);
+    return x + I * y;
+}
 
-static CFunc cfuncs[] = {
-    {"rat",rat},
-    {"exp",fexp},
-    {"expr",expr},
-    {"sinr",sinr},
-    {"tanr",tanr},
-    {NULL,NULL}
-};
+static double complex v1_sin(double complex z, double *p, double t) {
+    double x0 = creal(z);
+    double y0 = cimag(z);
+    return sin(x0) + I * sin(y0);
+}
 
-static double complex (*getCFunc(const char *name))(double complex, double*, double) {
-    int k=0;
-    while(cfuncs[k].name) {
-        if(!strcmp(name, cfuncs[k].name)) {
-            return cfuncs[k].f;
-        }
-        k++;
-    }
-    return NULL;
+static double complex v6(double complex z, double *p, double t) {
+    double r = cabs(z);
+    double x0 = creal(z);
+    double y0 = cimag(z);
+    if(y0<0) x0 = -x0;
+    double phi = atan(x0/y0);
+    double x = sin(phi+r);
+    double y = cos(phi-r);
+    return x + I * y;
+}
+
+static double complex v8(double complex z, double *p, double t) {
+    double r = cabs(z);
+    double x0 = creal(z);
+    double y0 = cimag(z);
+    if(y0<0) x0 = -x0;
+    double phi = atan(x0/y0);
+    double x = (phi/M_PI)*sin(M_PI*r);
+    double y = (phi/M_PI)*cos(M_PI*r);
+    return x + I * y;
+}
+
+static double complex v9(double complex z, double *p, double t) {
+    double r = cabs(z);
+    double x0 = creal(z);
+    double y0 = cimag(z);
+    if(y0<0) x0 = -x0;
+    double phi = atan(x0/y0);
+    double x = (cos(phi)+sin(r))/r;
+    double y = (sin(phi)-cos(r))/r;
+    return x + I * y;
+}
+
+static double complex v10(double complex z, double *p, double t) {
+    double r = cabs(z);
+    double x0 = creal(z);
+    double y0 = cimag(z);
+    if(y0<0) x0 = -x0;
+    double phi = atan(x0/y0);
+    double x = sin(phi)/r;
+    double y = cos(phi)*r;
+    return x + I * y;
+}
+
+static double complex v11(double complex z, double *p, double t) {
+    double r = cabs(z);
+    double x0 = creal(z);
+    double y0 = cimag(z);
+    if(y0<0) x0 = -x0;
+    double phi = atan(x0/y0);
+    double x = sin(phi)*cos(r);
+    double y = cos(phi)*sin(r);
+    return x + I * y;
+}
+#define P3(x) (x)*(x)*(x)
+static double complex v12(double complex z, double *p, double t) {
+    double r = cabs(z);
+    double x0 = creal(z);
+    double y0 = cimag(z);
+    if(y0<0) x0 = -x0;
+    double phi = atan(x0/y0);
+    double p0 = sin(phi+r);
+    double p1 = cos(phi-r);
+    double x = P3(p0)+P3(p1);
+    double y = P3(p0)-P3(p1);
+    return x + I * y;
+}
+
+static double complex v19(double complex z, double *p, double t) {
+    double r = cabs(z);
+    double x0 = creal(z);
+    double y0 = cimag(z);
+    if(y0<0) x0 = -x0;
+    double phi = atan(x0/y0);
+    double ep = pow(r,sin(phi));
+    double x = ep*cos(phi);
+    double y = ep*sin(phi);
+    return x + I * y;
+}
+
+static double complex v20(double complex z, double *p, double t) {
+    double x0 = creal(z);
+    double y0 = cimag(z);
+    double x = cos(M_PI*x0)*cosh(y0);
+    double y = -sin(M_PI*x0)*sinh(y0);
+    return x + I * y;
 }
 
 static void get_hsv2rgb_params(double phi, double S, double V, uint8_t *h, double *p, double *q, double *t) {
@@ -377,8 +451,6 @@ static double (*getNFunc(const char *name))(int,double*) {
 static uint8_t (*hsv[3])(double phi, double S, double V) = { hsv_g, hsv_b, hsv_r };
 
 
-static double complex **last;
-
 /* ============================= FUNCS =========================================== */
 static uint8_t ffunc(double complex (*func)(double complex z, double *p, double t), int plane, int x, int y, int w, int h, int n, CGen2Context *ctx) {
     double f = ctx->wfunc(n-ctx->offset,ctx->wp)/(double)w;
@@ -442,20 +514,64 @@ static uint8_t fexprs(int plane,int x, int y, int w, int h, int n, CGen2Context 
     return ffunc2(expr,plane,x,y,w,h,n,ctx);
 }
 
+static uint8_t fswirl(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    if(ctx->mode==1)
+    return ffunc2(v3_swirl,plane,x,y,w,h,n,ctx);
+    return ffunc(v3_swirl,plane,x,y,w,h,n,ctx);
+}
 
+static uint8_t fv1sin(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    if(ctx->mode==1)
+    return ffunc2(v1_sin,plane,x,y,w,h,n,ctx);
+    return ffunc(v1_sin,plane,x,y,w,h,n,ctx);
+}
 
-static uint8_t map(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
-    int nn = n - ctx->offset;
-    double f = ctx->p[4];
-    if(nn == 0) {
-        double complex z = x*f + y*f * I;
-        last[x+960][y+540] = z;
-        return hsv[plane](carg(z),ctx->p[plane], cabs(z)/(h/2));
-    } else {
-        double complex z = ctx->cfunc(last[x+960][y+540], ctx->p, n*ctx->div);
-        last[x+960][y+540] = z;
-        return hsv[plane](carg(z),ctx->p[plane], cabs(z)/(h/2));
-    }
+static uint8_t fv6(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    if(ctx->mode==1)
+    return ffunc2(v6,plane,x,y,w,h,n,ctx);
+    return ffunc(v6,plane,x,y,w,h,n,ctx);
+}
+
+static uint8_t fv8(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    if(ctx->mode==1)
+    return ffunc2(v8,plane,x,y,w,h,n,ctx);
+    return ffunc(v8,plane,x,y,w,h,n,ctx);
+}
+
+static uint8_t fv9(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    if(ctx->mode==1)
+    return ffunc2(v9,plane,x,y,w,h,n,ctx);
+    return ffunc(v9,plane,x,y,w,h,n,ctx);
+}
+
+static uint8_t fv10(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    if(ctx->mode==1)
+    return ffunc2(v10,plane,x,y,w,h,n,ctx);
+    return ffunc(v10,plane,x,y,w,h,n,ctx);
+}
+
+static uint8_t fv11(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    if(ctx->mode==1)
+    return ffunc2(v11,plane,x,y,w,h,n,ctx);
+    return ffunc(v11,plane,x,y,w,h,n,ctx);
+}
+
+static uint8_t fv12(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    if(ctx->mode==1)
+    return ffunc2(v12,plane,x,y,w,h,n,ctx);
+    return ffunc(v12,plane,x,y,w,h,n,ctx);
+}
+
+static uint8_t fv20(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    if(ctx->mode==1)
+    return ffunc2(v20,plane,x,y,w,h,n,ctx);
+    return ffunc(v20,plane,x,y,w,h,n,ctx);
+}
+
+static uint8_t fv19(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
+    if(ctx->mode==1)
+    return ffunc2(v19,plane,x,y,w,h,n,ctx);
+    return ffunc(v19,plane,x,y,w,h,n,ctx);
 }
 
 static uint8_t zero(int plane,int x, int y, int w, int h, int n, CGen2Context *ctx) {
@@ -474,6 +590,16 @@ static Func funcs[] = {
     { "fexprs", fexprs },
     { "fsins", fsins },
     { "ftans", ftans },
+    { "fswirl", fswirl },
+    { "fv1", fv1sin },
+    { "fv6", fv6 },
+    { "fv8", fv8 },
+    { "fv9", fv9 },
+    { "fv10", fv10 },
+    { "fv11", fv11 },
+    { "fv12", fv12 },
+    { "fv19", fv19 },
+    { "fv20", fv20 },
     { "fid", fid },
     { NULL, NULL }
 };
@@ -543,22 +669,6 @@ static av_cold int cgen2_init(AVFilterContext *ctx)
     } else {
         av_log(ctx, AV_LOG_WARNING, "no function given for f\n");
         cgen2->ffunc = zero;
-    }
-
-    if(cgen2->mf) {
-        CFUNC(cf) = getCFunc(cgen2->mf);
-        if(cf) {
-            cgen2->cfunc = cf;
-            cgen2->ffunc = map;
-        } else {
-            av_log(ctx, AV_LOG_WARNING, "function for mf not found %s\n", cgen2->mf);
-            cgen2->ffunc = zero;
-        }
-    }
-
-    last = (double complex **)malloc(1920 * sizeof(double complex *));
-    for(k=0;k<1920;k++) {
-        last[k] = (double complex *)malloc(1080 * sizeof(double complex));
     }
 
     return 0;
@@ -683,13 +793,7 @@ static int cgen2_filter_frame(AVFilterLink *inlink, AVFrame *in)
 
 static av_cold void cgen2_uninit(AVFilterContext *ctx)
 {
-    
     av_log(ctx, AV_LOG_INFO, "uninit\n");
-    int k;
-    for(k=0;k<1920;k++) {
-        free(last[k]);
-    }
-    free(last);
 }
 
 static const AVFilterPad cgen2_inputs[] = {

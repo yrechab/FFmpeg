@@ -43,10 +43,12 @@ typedef struct FracFuncParams {
     double fx;
     double fy;
     double rot;
+    double sat;
+    double fac;
     double *p;
     int ifcmode;
     long double complex (*ifunc)(long double complex,long double*);
-    long double ip[10];
+    long double ip[40];
     double (*cfunc[3])(double,double*);
     double cp[3][10];
     int cmod;
@@ -60,7 +62,7 @@ typedef struct FracContext {
     double p[40];
     const char *ifc;
     long double complex (*ifunc)(long double complex,long double*);
-    long double ip[10];
+    long double ip[40];
     int ifcmode;
     const char *nf[10];
     double np[10][10];
@@ -77,6 +79,8 @@ typedef struct FracContext {
     double fx;
     double fy;
     double rot;
+    double sat;
+    double fac;
     int hsub, vsub;             ///< chroma subsampling
     int planes;                 ///< number of planes
     int is_rgb;
@@ -98,6 +102,8 @@ static const AVOption frac_options[] = {
     { "fx","fx",   OFFSET(fx),   AV_OPT_TYPE_DOUBLE, {.dbl =  1}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "fy","fy",   OFFSET(fy),   AV_OPT_TYPE_DOUBLE, {.dbl =  1}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "rot","rot",   OFFSET(rot),   AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "sat","sat",   OFFSET(sat),   AV_OPT_TYPE_DOUBLE, {.dbl = 1.0}, 0,  1,  FLAGS },
+    { "fac","fac",   OFFSET(fac),   AV_OPT_TYPE_DOUBLE, {.dbl = 1.0}, 0,  DBL_MAX,  FLAGS },
     { "ifc",  "ifc",   OFFSET(ifc),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "ifcmode","ifcmode",OFFSET(ifcmode), AV_OPT_TYPE_INT,    {.i64=0},    0,        10,        FLAGS },
     { "nf0",  "nf0",     OFFSET(nf[0]),     AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
@@ -144,6 +150,9 @@ static const AVOption frac_options[] = {
 };
 
 AVFILTER_DEFINE_CLASS(frac);
+
+
+// ********************* inner functions **************************/
 typedef struct IFunc {
     const char *name;
     long double complex (*f)(long double complex,long double*);
@@ -187,7 +196,7 @@ static long double complex kaneko(long double complex z, long double *p) {
     long double a = p[0];
     long double b = p[1];
     long double x = a * creall(z) + (1-a)*(1-b*cimagl(z)*cimagl(z));
-    long double y = creal(z);
+    long double y = creall(z);
     return x + I * y;
 }
 
@@ -232,6 +241,148 @@ static long double complex taninv(long double complex z, long double *p) {
     return ctanl(z/c);
 }
 
+static long double complex id(long double complex z, long double *p) {
+    return z;
+}
+
+static long double complex rat(long double complex z, long double *p) {
+    int zg = p[0];
+    long double complex zl = p[1];
+    int k;
+    for(k = 0; k<(zg*2); k+=2) {
+        zl *= (z-(p[k+2] + p[k+3]*I));
+    }
+    int ng = p[20];
+    if(ng == 0) return zl;
+
+    long double complex nen = p[21];
+    for(k = 20; k<(ng*2+20); k+=2) {
+        nen *= (z-(p[k+2] + p[k+3]*I));
+    }
+    return zl/nen;
+}
+
+static long double complex fexp(long double complex z, long double *p) {
+    return p[0] + (p[1]?p[1]:1) * z * cexp( I * (p[2]?p[2]:1)/(1/pow(cabsl(z),p[3])));
+}
+
+static long double complex expr(long double complex z, long double *p) {
+    return cexp(rat(z,p));
+}
+
+static long double complex sinr(long double complex z,  long double *p) {
+    return csin(rat(z,p));
+}
+
+static long double complex tanr(long double complex z, long double *p) {
+    return ctan(rat(z,p));
+}
+
+static long double complex v3(long double complex z, long double *p) {
+    long double r = cabsl(z);
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    long double x = x0*sinl(r*r)-y0*cosl(r*r);
+    long double y = x0*cosl(r*r)-y0*sinl(r*r);
+    return x + I * y;
+}
+
+static long double complex v1(long double complex z, long double *p) {
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    return sinl(x0) + I * sinl(y0);
+}
+
+static long double complex v6(long double complex z, long double *p) {
+    long double r = cabsl(z);
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    if(y0<0) x0 = -x0;
+    long double phi = atanl(x0/y0);
+    long double x = sinl(phi+r);
+    long double y = cosl(phi-r);
+    return x + I * y;
+}
+
+static long double complex v8(long double complex z, long double *p) {
+    long double r = cabsl(z);
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    if(y0<0) x0 = -x0;
+    long double phi = atanl(x0/y0);
+    long double x = (phi/p[0])*sinl(p[1]*r);
+    long double y = (phi/p[2])*cosl(p[3]*r);
+    return x + I * y;
+}
+
+static long double complex v9(long double complex z, long double *p) {
+    long double r = cabsl(z);
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    if(y0<0) x0 = -x0;
+    long double phi = atanl(x0/y0);
+    long double x = (cosl(phi)+sinl(r))/r;
+    long double y = (sinl(phi)-cosl(r))/r;
+    return x + I * y;
+}
+
+static long double complex v10(long double complex z, long double *p) {
+    long double r = cabsl(z);
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    if(y0<0) x0 = -x0;
+    long double phi = atanl(x0/y0);
+    long double x = sinl(phi)/r;
+    long double y = cosl(phi)*r;
+    return x + I * y;
+}
+
+static long double complex v11(long double complex z, long double *p) {
+    long double r = cabsl(z);
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    if(y0<0) x0 = -x0;
+    long double phi = atanl(x0/y0);
+    long double x = sinl(phi)*cosl(r);
+    long double y = cosl(phi)*sinl(r);
+    return x + I * y;
+}
+#define P3(x) (x)*(x)*(x)
+static long double complex v12(long double complex z, long double *p) {
+    long double r = cabsl(z);
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    if(y0<0) x0 = -x0;
+    long double phi = atanl(x0/y0);
+    long double p0 = sinl(phi+r);
+    long double p1 = cosl(phi-r);
+    long double x = P3(p0)+P3(p1);
+    long double y = P3(p0)-P3(p1);
+    return x + I * y;
+}
+
+static long double complex v19(long double complex z, long double *p) {
+    long double r = cabsl(z);
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    if(y0<0) x0 = -x0;
+    long double phi = atanl(x0/y0);
+    long double ep = pow(r,sinl(phi));
+    long double x = ep*cosl(phi);
+    long double y = ep*sinl(phi);
+    return x + I * y;
+}
+
+static long double complex v20(long double complex z, long double *p) {
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    long double x = cosl(M_PI*x0)*coshl(y0);
+    long double y = -sinl(M_PI*x0)*sinhl(y0);
+    return x + I * y;
+}
+
+
+
 static IFunc ifuncs[] = {
     { "zero", izero },
     { "hopalong", hopalong },
@@ -246,6 +397,22 @@ static IFunc ifuncs[] = {
     { "sinh", sin_h },
     { "cosinv", cosinv },
     { "tan", taninv },
+    { "rat", rat },
+    { "ikeda", fexp },
+    { "fexpr", expr },
+    { "fsin", sinr },
+    { "ftan", tanr},
+    { "fv3", v3 },
+    { "fv1", v1 },
+    { "fv6", v6 },
+    { "fv8", v8 },
+    { "fv9", v9 },
+    { "fv10", v10 },
+    { "fv11", v11 },
+    { "fv12", v12 },
+    { "fv19", v19 },
+    { "fv20", v20 },
+    { "id", id },
     { NULL, NULL }
 };
 
@@ -277,6 +444,68 @@ static void parse_ifunc(const char *ff, long double *p, long double complex (**f
     free(str);
 }
 
+// ************************** hsv util **************************************/
+static void get_hsv2rgb_params(double phi, double S, double V, uint8_t *h, double *p, double *q, double *t) {
+    double H = phi<0?((180/M_PI)*phi)+360:(180/M_PI)*phi;
+    *h = floor(H/60.0);
+    double f = H/60.0 - *h;
+    *p = V*(1-S);
+    *q = V*(1-S*f);
+    *t = V*(1-S*(1-f)); 
+}
+
+static uint8_t hsv_r(double phi, double S, double V) {
+    double p,q,t;
+    uint8_t h;
+    get_hsv2rgb_params(phi, S, V, &h, &p, &q, &t);
+    uint8_t retval = 0;
+    switch(h) {
+        case 0:
+        case 5: retval = V * 255; break;
+        case 1: retval = q * 255; break;
+        case 2:
+        case 3: retval = p * 255; break;
+        case 4: retval = t * 255; break;        
+    }
+    return retval;
+}
+
+static uint8_t hsv_g(double phi, double S, double V) {
+    double p,q,t;
+    uint8_t h;
+    get_hsv2rgb_params(phi, S, V, &h, &p, &q, &t);
+    uint8_t retval = 0;
+    switch(h) {
+        case 1:
+        case 2: retval = V * 255; break;
+        case 3: retval = q * 255; break;
+        case 4:
+        case 5: retval = p * 255; break;
+        case 0: retval = t * 255; break;        
+    }
+    return retval;
+}
+
+static uint8_t hsv_b(double phi, double S, double V) {
+    double p,q,t;
+    uint8_t h;
+    get_hsv2rgb_params(phi, S, V, &h, &p, &q, &t);
+    uint8_t retval = 0;
+    switch(h) {
+        case 3:
+        case 4: retval = V * 255; break;
+        case 5: retval = q * 255; break;
+        case 0:
+        case 1: retval = p * 255; break;
+        case 2: retval = t * 255; break;        
+    }
+    return retval;
+}
+
+static uint8_t (*hsv[3])(double phi, double S, double V) = { hsv_g, hsv_b, hsv_r };
+
+// ************************** functions *************************************/
+
 
 typedef struct Func {
     const char *name;
@@ -307,6 +536,43 @@ static void sqs(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
         ptr[x] = asin(sqrt(x0*x0+y0*y0)/(params->w/2))*n*params->p[plane];
     }
 }
+
+static void c(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+    double xi0 = ((double)x-params->w/2)/(double)params->w;
+    double yi0 = ((double)y-params->h/2)/(double)params->w;
+    long double complex _z = av_genutil_rotate(xi0+I*yi0,params->rot);
+    long double x0 = (creall(_z) * params->fx + params->x); 
+    long double y0 = (cimagl(_z) * params->fy + params->y);
+    _z = x0 + I * y0;
+    long double complex z = params->ifunc(_z,params->ip);
+    uint8_t *ptr;
+    int plane;
+
+    for(plane=0;plane<3;plane++) {
+        double color = params->fac * cabsl(z) * hsv[plane](cargl(z),params->sat,1);
+        ptr = in->data[plane] + in->linesize[plane] * y;
+        ptr[x] = floor(color);
+    }
+}
+
+static void cs(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+    double xi0 = ((double)x-params->w/2)/(double)params->w;
+    double yi0 = ((double)y-params->h/2)/(double)params->w;
+    long double complex _z = av_genutil_rotate(xi0+I*yi0,params->rot);
+    long double x0 = (creall(_z) * params->fx + params->x); 
+    long double y0 = (cimagl(_z) * params->fy + params->y);
+    _z = x0 + I * y0;
+    long double complex z = params->ifunc(_z,params->ip);
+    uint8_t *ptr;
+    int plane;
+
+    for(plane=0;plane<3;plane++) {
+        ptr = in->data[plane] + in->linesize[plane] * y;
+        //ptr[x] = floor(color);
+        ptr[x] = (sin(params->fac * cabsl(z) * hsv[plane](cargl(z),params->sat,1))+1)*127;
+    }
+}
+
 
 static void j(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     int plane;
@@ -434,6 +700,8 @@ static Func funcs[] = {
     { "hopa1", hopa1 },
     { "j", j },
     { "m", m },
+    { "c", c },
+    { "cs", cs },
     { NULL, NULL }
 };
 
@@ -474,6 +742,14 @@ static av_cold void logParameters(AVFilterContext *ctx,double* p, int len) {
     av_log(ctx, AV_LOG_INFO,"\n"); 
 }
 
+static av_cold void logParametersL(AVFilterContext *ctx,long double* p, int len) {
+    int k;
+    for(k=0;k<len;k++) {
+        av_log(ctx, AV_LOG_INFO," %Lf",p[k]); 
+    }
+    av_log(ctx, AV_LOG_INFO,"\n"); 
+}
+
 static av_cold int frac_init(AVFilterContext *ctx)
 {
     int k;
@@ -510,7 +786,7 @@ static av_cold int frac_init(AVFilterContext *ctx)
             av_log(ctx, AV_LOG_WARNING, "function for if not found %s\n", frac->ifc);
         } else {
             av_log(ctx, AV_LOG_INFO, "function for if is [%s]", frac->ifc);
-            logParameters(ctx,frac->ip,10);
+            logParametersL(ctx,frac->ip,40);
         }
     } 
     if(!frac->ifunc) {
@@ -621,7 +897,7 @@ static void make_params(FracContext *frac, FracFuncParams *params, int frame_num
     }
     params->cmod = frac->cmod;
     params->ifcmode = frac->ifcmode;
-    for(j=0;j<10;j++) params->ip[j] = frac->ip[j];
+    for(j=0;j<40;j++) params->ip[j] = frac->ip[j];
     params->ifunc = frac->ifunc;
     params->w = frac->w;
     params->h = frac->h;
@@ -631,6 +907,8 @@ static void make_params(FracContext *frac, FracFuncParams *params, int frame_num
     params->x = frac->x;
     params->y = frac->y;
     params->rot = frac->rot;
+    params->sat = frac->sat;
+    params->fac = frac->fac;
 
     double np[10][10];
     for(k=0;k<10;k++) {
@@ -715,6 +993,18 @@ static void make_params(FracContext *frac, FracFuncParams *params, int frame_num
                     if(mode[0] == 'o') params->rot = value;
                     if(mode[0] == 'a') params->rot = frac->rot + value;
                     if(mode[0] == 's') params->rot = frac->rot - value;
+                    break;
+                }
+                case 'f': {
+                    if(mode[0] == 'o') params->fac = value;
+                    if(mode[0] == 'a') params->fac = frac->fac + value;
+                    if(mode[0] == 's') params->fac = frac->fac - value;
+                    break;
+                }
+                case 's': {
+                    if(mode[0] == 'o') params->sat = value;
+                    if(mode[0] == 'a') params->sat = frac->sat + value;
+                    if(mode[0] == 's') params->sat = frac->sat - value;
                     break;
                 }
             }
