@@ -38,6 +38,7 @@ typedef struct GenutilFuncParams {
     // func params
     double *p;
     char *s[10];
+    int mode;
     //color
     double (*cfunc[3])(double,double*);
     double cp[3][10];
@@ -107,6 +108,7 @@ double complex av_genutil_harmonic(double t, double *p);
 double complex av_genutil_cornoid(double t, double *p);
 double complex av_genutil_line(double t, double *p);
 double complex av_genutil_poly(double t, double *p);
+double complex av_genutil_poly_u(double t, double *p);
 double complex av_genutil_addoid(double t, double *p);
 
 double (*av_genutil_get_nfunc(const char *name))(int,double*);

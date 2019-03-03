@@ -537,6 +537,7 @@ static void make_params(PlotContext *plot, GenutilFuncParams *params, int frame_
 static int plot_filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
+    srand(0);
     //av_log(ctx, AV_LOG_INFO, "linesize %d\n", in->linesize[0]);
     PlotContext *plot = ctx->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];

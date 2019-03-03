@@ -90,6 +90,38 @@ double complex av_genutil_poly(double t, double *p) {
     return ret;
 }
 
+static double complex av_genutil_poly_s(double t, double *p) {
+    int len = floor(p[0]);
+    int k;
+    double next;
+    double complex ret = 0;
+    double length = poly_length(p);
+    if(t>length) return ret;
+    for(k=0;k<len*2;k+=2) {
+        ret = av_genutil_line_p(t,p[k+1],p[k+2],p[k+3],p[k+4],&next);
+        if(next == 0) break;
+        t-=next;
+    }
+    return ret;
+}
+
+double complex av_genutil_poly_u(double t, double *p) {
+    int len = floor(p[0]);
+    int k;
+    double next;
+    double complex ret;
+    double length = poly_length(p);
+    double _t = fmod(t,length);
+    //double _t = t;
+    for(k=0;k<len*4;k+=4) {
+        ret = av_genutil_line_p(_t,p[k+1],p[k+2],p[k+3],p[k+4],&next);
+        if(next == 0) break;
+        _t-=next;
+    }
+    return ret;
+}
+
+
 double complex av_genutil_line(double t, double *p) {
     double dummy;
     double complex ret = av_genutil_line_p(t,p[0],p[1],p[2],p[3],&dummy);
@@ -575,6 +607,28 @@ static void curve2(GenutilFuncParams *params, PFUNC(f),int n, AVFrame *in) {
     }
 }
 
+static void rnd_curve(GenutilFuncParams *params, PFUNC(f),int n, AVFrame *in) {
+    double count = params->count;
+    int k;
+    for(k=0;k<count;k++) {
+        double rnd1 = ((double)rand())/RAND_MAX;
+        double rnd3 = ((double)rand())/RAND_MAX;
+        double rnd4 = ((double)rand())/RAND_MAX;
+        double alpha = rnd1 * 2 * M_PI;
+        int j;
+        double speed = params->speed * rnd4;
+        double start = rnd3*params->length;
+        int layers = params->layers;
+        for(j=0;j<layers;j++) {
+            double rnd2 = ((double)rand())/RAND_MAX;
+            double s = start + rnd2*params->length*j/layers;
+            double t = s + n*speed;
+            set_alpha(params,in,t,f,1,alpha,0,0);
+        }
+    }
+}
+
+
 /******************** FFUNCS **************************/
 
 typedef struct GenutilFunc {
@@ -676,126 +730,272 @@ static void genutil_addoid(GenutilFuncParams *params, int n, AVFrame *in) {
     colored_curve(params,av_genutil_addoid,in);
 }
 
-static void genutil_rndpoly(GenutilFuncParams *params, int n, AVFrame *in) {
-    double *_p = params->p;
-    int len = floor(_p[0]);
-    int size = _p[1];
-    double *p = calloc(len*2+4,sizeof(double));
-    int j;
-    int last = -1;
-    int k=3;
-    for(j=0;j<len;j++) {
-        int rnd = rand() % 4;
-        
-        switch(rnd) {
-            case 0: if(last!=1) {p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
-            case 1: if(last!=0) {p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
-            case 2: if(last!=3) {p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2;last = rnd;} break;
-            case 3: if(last!=2) {p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2;last = rnd;} break;
-        }
-    }
-    //p[k] = p[k-2]; p[k+1] = p[k-1];
-    p[0] = len;
-    params->p = p;
-    colored_curve(params,av_genutil_poly,in);
-    free(p);
-}
-
-static void genutil_rndpoly_p(GenutilFuncParams *params, int (*f)(int,int), int n, AVFrame *in) {
-    double *_p = params->p;
-    int len = floor(_p[0]);
-    int size = _p[1];
+static double *gen_poly(int len, int size, int (*f)(int,int,double*), int n, double *pm, int mode) {
     double *p = calloc(len*2+4,sizeof(double));
     int k=3;
     int j;
     int last = -1;
+    int c = 0;
+    double s6 = sqrt(3)/2;
     for(j=0;j<len;j++) {
-        int rnd = f(n,j);
-        switch(rnd) {
-            case 0: if(last!=4) {p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
-            case 4: if(last!=0) {p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
-            case 1: if(last!=5) {p[k] = p[k-2] - size; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
-            case 5: if(last!=1) {p[k] = p[k-2] + size; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
-            case 2: if(last!=6) {p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2;last = rnd;} break;
-            case 6: if(last!=2) {p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2;last = rnd;} break;
-            case 3: if(last!=7) {p[k] = p[k-2] - size; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
-            case 7: if(last!=3) {p[k] = p[k-2] + size; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
+        if(mode == 0) {
+            int rnd = f(j,n,pm)%8;
+            switch(rnd) {
+                case 0: if(last!=4) {p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2;last = rnd;c++;} break;
+                case 1: if(last!=5) {p[k] = p[k-2] - size; p[k+1] = p[k-1] - size;k+=2;last = rnd;c++;} break;
+                case 2: if(last!=6) {p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2;last = rnd;c++;} break;
+                case 3: if(last!=7) {p[k] = p[k-2] - size; p[k+1] = p[k-1] + size;k+=2;last = rnd;c++;} break;
+                case 4: if(last!=0) {p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2;last = rnd;c++;} break;
+                case 5: if(last!=1) {p[k] = p[k-2] + size; p[k+1] = p[k-1] + size;k+=2;last = rnd;c++;} break;
+                case 6: if(last!=2) {p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2;last = rnd;c++;} break;
+                case 7: if(last!=3) {p[k] = p[k-2] + size; p[k+1] = p[k-1] - size;k+=2;last = rnd;c++;} break;
+            }
+        } else if(mode == 1) {
+            int rnd = f(j,n,pm)%4;
+            switch(rnd) {
+                case 0: if(last!=1) {p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2;last = rnd;c++;} break;
+                case 1: if(last!=0) {p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2;last = rnd;c++;} break;
+                case 2: if(last!=3) {p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2;last = rnd;c++;} break;
+                case 3: if(last!=2) {p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2;last = rnd;c++;} break;
+            }
+        } else if(mode == 2) {
+            int rnd = f(j,n,pm)%8;
+            switch(rnd) {
+                case 0: p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2;c++; break;
+                case 4: p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2;c++; break;
+                case 1: p[k] = p[k-2] - size; p[k+1] = p[k-1] - size;k+=2;c++; break;
+                case 5: p[k] = p[k-2] + size; p[k+1] = p[k-1] + size;k+=2;c++; break;
+                case 2: p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2;c++; break;
+                case 6: p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2;c++; break;
+                case 3: p[k] = p[k-2] - size; p[k+1] = p[k-1] + size;k+=2;c++; break;
+                case 7: p[k] = p[k-2] + size; p[k+1] = p[k-1] - size;k+=2;c++; break;
+            }
+        } else if(mode == 3) {
+            int rnd = f(j,n,pm)%4;
+            switch(rnd) {
+                case 0: p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2;c++; break;
+                case 1: p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2;c++; break;
+                case 2: p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2;c++; break;
+                case 3: p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2;c++; break;
+            }
+        } else if(mode == 4) {
+            int rnd = f(j,n,pm)%6;
+            switch(rnd) {
+                case 0: if(last!=4) {p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2;last = rnd;c++;} break;
+                case 4: if(last!=0) {p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2;last = rnd;c++;} break;
+                case 1: if(last!=5) {p[k] = p[k-2] - size*0.5; p[k+1] = p[k-1] - size*s6;k+=2;last = rnd;c++;} break;
+                case 5: if(last!=1) {p[k] = p[k-2] + size*0.5; p[k+1] = p[k-1] + size*s6;k+=2;last = rnd;c++;} break;
+                case 2: if(last!=3) {p[k] = p[k-2] - size*0.5; p[k+1] = p[k-1] + size*s6;k+=2;last = rnd;c++;} break;
+                case 3: if(last!=2) {p[k] = p[k-2] + size*0.5; p[k+1] = p[k-1] - size*s6;k+=2;last = rnd;c++;} break;
+             }
+         } else if(mode == 5) {
+            int rnd = f(j,n,pm)%12;
+            switch(rnd) {
+                case 0: if(last!=6) {p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2;last = rnd;c++;} break;
+                case 1: if(last!=7) {p[k] = p[k-2] - size*0.5; p[k+1] = p[k-1] - size*s6;k+=2;last = rnd;c++;} break;
+                case 2: if(last!=8) {p[k] = p[k-2] - size*s6; p[k+1] = p[k-1] - size*0.5;k+=2;last = rnd;c++;} break;
+                case 3: if(last!=9) {p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2;last = rnd;c++;} break;
+                case 4: if(last!=10) {p[k] = p[k-2] - size*s6; p[k+1] = p[k-1] + size*0.5;k+=2;last = rnd;c++;} break;
+                case 5: if(last!=11) {p[k] = p[k-2] - size*0.5; p[k+1] = p[k-1] + size*s6;k+=2;last = rnd;c++;} break;
+                case 6: if(last!=0) {p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2;last = rnd;c++;} break;
+                case 7: if(last!=1) {p[k] = p[k-2] + size*0.5; p[k+1] = p[k-1] + size*s6;k+=2;last = rnd;c++;} break;
+                case 8: if(last!=2) {p[k] = p[k-2] + size*s6; p[k+1] = p[k-1] + size*0.5;k+=2;last = rnd;c++;} break;
+                case 9: if(last!=3) {p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2;last = rnd;c++;} break;
+                case 10: if(last!=4) {p[k] = p[k-2] + size*s6; p[k+1] = p[k-1] - size*0.5;k+=2;last = rnd;c++;} break;
+                case 11: if(last!=5) {p[k] = p[k-2] + size*0.5; p[k+1] = p[k-1] - size*s6;k+=2;last = rnd;c++;} break;
+            }
         }
     }
     p[k] = p[k-2]; p[k+1] = p[k-1];
-    p[0] = len;
-    params->p = p;
-    colored_curve(params,av_genutil_poly,in);
-    free(p);
+    p[0] = c+1;
+    return p;
 }
 
-static int rnd(int n, int k) {
-    return rand() % 8;
+static int gp_rnd(int k, int n, double *p) {
+    return rand();
 }
 
-static int test(int n, int k) {
-    //if(k%2==0) return  ((((n*n)%(k+1))*k)%4)+4 ;
-    //return (((n*n)%(k+1))*k)%4;
-    //return (int)(floor(sin(n*k)*8))%8;
-    //return (n%(k+1))%8;
-    //return ((int)floor((k/8)*n*n/(n+1)))%8;
-    //return ((n*k)%(k+1))%8;
-    //return ((int)floor(k*1.01*n))%8;
-    return ((int)floor(k*1.017321*n))%8;
+static int gp_sin(int k, int n, double *p) {
+    return (int)(floor(sin(n*k*p[0])*8));
 }
 
-static void genutil_rndpoly2(GenutilFuncParams *params, int n, AVFrame *in) {
-    genutil_rndpoly_p(params,rnd,n,in);
+static int gp_mod(int k, int n, double *p) {
+    return (n%(k+1));
 }
 
-static void genutil_rndpoly3(GenutilFuncParams *params, int n, AVFrame *in) {
-    genutil_rndpoly_p(params,test,n,in);
+static int gp_mod1(int k, int n, double *p) {
+    return ((n*k)%(k+1));
 }
 
+static int gp_q(int k, int n, double *p) {
+    return k*(k*p[0]) *n*(n*p[1]);
+}
 
-static void ulam(int n, int *buf, int len) {
+static int gp_mul(int k, int n, double *p) {
+    return ((int)floor(k*n*p[0]));
+}
+
+static int gp_ulam(int k, int n, double *p) {
+    int j;
+    int last = n;
+    for(j=0;j<k;j++) {
+        if(last%2==0) last = last/2;
+        else last = 3*last+1;
+    }
+    return last;
+}
+
+static void interpolate_poly(double *p1, double *p2, double t) {
+    t = (sin(t*M_PI-M_PI/2)+1)/2;
+    for(int k=3; k<p1[0]*2; k+=2) {
+        p1[k] += t*(p2[k]-p1[k]);
+        p1[k+1] += t*(p2[k+1]-p1[k+1]);
+    }
+}
+
+static void genutil_rndpoly(GenutilFuncParams *params, int n, int (*f)(int,int,double*), AVFrame *in) {
+    int len = floor(params->p[0]);
+    int size = params->p[1];
+    int interval = params->p[2];
+    int pause = params->p[3];
+    int steplen = interval+pause;
+    int step = n/steplen;
+    srand(step);
+    double *p1 = gen_poly(len,size,f,step,&params->p[4],params->mode);
+    int nn = n%steplen;
+    if(nn >= pause) {
+        srand(step+1);
+        double *p2 = gen_poly(len,size,f,step+1,&params->p[4],params->mode);
+        interpolate_poly(p1,p2,(double)(nn-pause)/(double)interval);
+        free(p2);
+    }
+    double *ps = params->p;
+    params->p = p1;
+    colored_curve(params,av_genutil_poly_s,in);
+    params->p = ps;
+    free(p1);
+}
+
+static void genutil_rndpoly_p(GenutilFuncParams *params, int n, int (*f)(int,int,double*), AVFrame *in) {
     int k;
-    buf[0] = n;
-    for(k=1;k<len;k++) {
-        if(buf[k-1] %2 == 0) buf[k]=buf[k-1]/2;
-        else buf[k] = 3 * buf[k-1] +1;
+    int count = params->count;
+    double rot = params->rot;
+    for(k=0;k<count;k++) {
+        params->rot = rot + k*2*M_PI/count;
+        genutil_rndpoly(params,n,f,in);
     }
 }
 
-static void genutil_ulam(GenutilFuncParams *params, int n, AVFrame *in) {
-    double *_p = params->p;
-    int len = floor(_p[0]);
-    int size = _p[1];
+static void genutil_poly_mul(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p(params,n,gp_mul,in);
+}
+
+static void genutil_poly_mod(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p(params,n,gp_mod,in);
+}
+
+static void genutil_poly_mod1(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p(params,n,gp_mod1,in);
+}
+
+static void genutil_poly_sin(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p(params,n,gp_sin,in);
+}
+
+static void genutil_poly_q(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p(params,n,gp_q,in);
+}
+
+static void genutil_poly_rnd(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p(params,n,gp_rnd,in);
+}
+
+static void genutil_poly_ulam(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p(params,n,gp_ulam,in);
+}
+
+static double *gen_poly_d(int len, int size, double (*f)(int,int,double*), int n, double *pm) {
     double *p = calloc(len*2+4,sizeof(double));
-    int *buf = calloc(len+1,sizeof(int));
-    ulam(n,buf,len);
-    int k,j;
-    k=3;
+    int k=3;
+    int j;
     for(j=0;j<len;j++) {
-        
-        int rnd = buf[j] % 4;
-        switch(rnd) {
-            case 0: p[k] = p[k-2]; p[k+1] = p[k-1] + size;k+=2; break;
-            case 2: p[k] = p[k-2]; p[k+1] = p[k-1] - size;k+=2; break;
-            case 1: p[k] = p[k-2] + size; p[k+1] = p[k-1];k+=2; break;
-            case 3: p[k] = p[k-2] - size; p[k+1] = p[k-1];k+=2; break;
-            /*
-            case 4: if(last!=5) {p[k] = p[k-2] + size; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
-            case 5: if(last!=4) {p[k] = p[k-2] - size; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
-            case 6: if(last!=7) {p[k] = p[k-2] - size; p[k+1] = p[k-1] + size;k+=2;last = rnd;} break;
-            case 7: if(last!=6) {p[k] = p[k-2] + size; p[k+1] = p[k-1] - size;k+=2;last = rnd;} break;
-            */
-        }
+        double phi = f(j,n,pm);
+        p[k] = p[k-2] + (double)size * cos(phi); 
+        p[k+1] = p[k-1] + (double)size * sin(phi);
+        k+=2;
     }
-    //p[k] = p[k-2]; p[k+1] = p[k-1];
+    p[k] = p[k-2]; p[k+1] = p[k-1];
     p[0] = len;
-    params->p = p;
-    colored_curve(params,av_genutil_poly,in);
-    params->p = _p;
-    free(buf);
-    free(p);
+    return p;
 }
 
+
+static void genutil_rndpoly_d(GenutilFuncParams *params, int n, double (*f)(int,int,double*), AVFrame *in) {
+    int len = floor(params->p[0]);
+    int size = params->p[1];
+    int interval = params->p[2];
+    int pause = params->p[3];
+    int steplen = interval+pause;
+    int step = n/steplen;
+    srand(step);
+    double *p1 = gen_poly_d(len,size,f,step,&params->p[4]);
+    int nn = n%steplen;
+    if(nn >= pause) {
+        srand(step+1);
+        double *p2 = gen_poly_d(len,size,f,step+1,&params->p[4]);
+        interpolate_poly(p1,p2,(double)(nn-pause)/(double)interval);
+        free(p2);
+    }
+    double *ps = params->p;
+    params->p = p1;
+    colored_curve(params,av_genutil_poly_s,in);
+    params->p = ps;
+    free(p1);
+}
+
+static void genutil_rndpoly_p_d(GenutilFuncParams *params, int n, double (*f)(int,int,double*), AVFrame *in) {
+    int k;
+    int count = params->count;
+    double rot = params->rot;
+    for(k=0;k<count;k++) {
+        params->rot = rot + k*2*M_PI/count;
+        genutil_rndpoly_d(params,n,f,in);
+    }
+}
+
+static double dfrnd(int k, int n, double *pm) {
+    return ((double)rand()/RAND_MAX)*2*M_PI; 
+}
+
+static void genutil_poly_drnd(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p_d(params,n,dfrnd,in);
+}
+
+static double dfsin(int k, int n, double *pm) {
+    return sin(k*n*pm[0])*pm[1]*M_PI;
+}
+
+static void genutil_poly_dsin(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p_d(params,n,dfsin,in);
+}
+
+static double dfq(int k, int n, double *pm) {
+    return fmod((double)k*k*n*pm[0], 2*M_PI);
+}
+
+static void genutil_poly_dq(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p_d(params,n,dfq,in);
+}
+
+static double dfqs(int k, int n, double *pm) {
+    return fmod((double)k*sin(k*pm[1])*n*pm[0], 2*M_PI);
+}
+
+static void genutil_poly_dqs(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p_d(params,n,dfqs,in);
+}
+
+/******************************* hilbert *************************************/
 static void move(uint8_t val, int *pos, uint8_t *buf) {
     buf[*pos]=val;
     (*pos) += 1;
@@ -899,8 +1099,6 @@ static void genutil_hilbert(GenutilFuncParams *params, int n, AVFrame *in) {
     free(buf);
     free(p);
 }
-
-
 
 /***** PLOT *********/
 static void genutil_pkardioids(GenutilFuncParams *params, int n, AVFrame *in) {
@@ -1059,6 +1257,10 @@ static void genutil_pline(GenutilFuncParams *params, int n, AVFrame *in) {
 
 static void genutil_ppoly(GenutilFuncParams *params, int n, AVFrame *in) {
     curve(params,av_genutil_poly,n,in);
+}
+
+static void genutil_ppolyu(GenutilFuncParams *params, int n, AVFrame *in) {
+    rnd_curve(params,av_genutil_poly_u,n,in);
 }
 
 static void genutil_prndpoly_p(GenutilFuncParams *params, int (*f)(int,double), int n, AVFrame *in) {
@@ -1432,9 +1634,9 @@ static int rndf(int k, double *p) {
     return rand();
 }
 
-static int testf(int k, double *p) {
-    return k*p[0];
-}
+//static int testf(int k, double *p) {
+//    return k*p[0];
+//}
 
 static int testsin(int k, double *p) {
     return ((sin(k*p[0])+1)/2) * 8;
@@ -1569,10 +1771,17 @@ static GenutilFunc gfuncs[] = {
     {"cornoid",genutil_cornoid},
     {"line",genutil_line},
     {"poly",genutil_poly},
-    {"rndpoly",genutil_rndpoly},
-    {"rndpoly2",genutil_rndpoly2},
-    {"rndpoly3",genutil_rndpoly3},
-    {"ulam",genutil_ulam},
+    {"polymul",genutil_poly_mul},
+    {"polymod",genutil_poly_mod},
+    {"polymod1",genutil_poly_mod1},
+    {"polysin",genutil_poly_sin},
+    {"polyq",genutil_poly_q},
+    {"polyrnd",genutil_poly_rnd},
+    {"polydsin",genutil_poly_dsin},
+    {"polydrnd",genutil_poly_drnd},
+    {"polydq",genutil_poly_dq},
+    {"polydqs",genutil_poly_dqs},
+    {"ulam",genutil_poly_ulam},
     {"frac",genutil_frac},
     {"mira",genutil_mira},
     {"kaneko1",genutil_kaneko1},
@@ -1618,6 +1827,7 @@ static GenutilFunc gfuncs[] = {
     {"pcornoid",genutil_pcornoid},
     {"pline",genutil_pline},
     {"ppoly",genutil_ppoly},
+    {"ppolyu",genutil_ppolyu},
     {"prndpoly",genutil_prndpoly},
     {"paddoid",genutil_paddoid},
     {"philbert",genutil_philbert},
@@ -1662,7 +1872,11 @@ static double npoly(int n, double *p) {
 }
 
 static double nsin(int n, double *p) {
-    return (sin(p[0]*n - M_PI/2 + p[3])+1)*p[1]+p[2]; 
+    return (sin(p[0]*n - M_PI/2 + p[3])+1)*p[1]; 
+}
+
+static double linsin(int n, double *p) {
+    return p[0]*n+(sin(p[1]*n + p[3]))*p[2]; 
 }
 
 static double idn(int n, double *p) {
@@ -1740,6 +1954,7 @@ static NFunc nfuncs[] = {
     {"idn",idn},
     {"constant",constant},
     {"lin",lin},
+    {"linsin",linsin},
     {"poly",npoly},
     {"pchain",pchain},
     {"pval",pval},

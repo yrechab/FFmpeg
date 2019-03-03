@@ -59,16 +59,15 @@ typedef struct PlotCurveContext {
     double fx;
     double fy;
     double x;
-    double xn;
     double y;
-    double yn;
     double delta;
     double start;
     double length;
+    int mode;
+    int count;
     int form;
     int dim;
     double rot;
-    double rotn;
     int hsub, vsub;             ///< chroma subsampling
     int w, h;            
     int planes;                 ///< number of planes
@@ -122,15 +121,13 @@ static const AVOption plotcurve_options[] = {
     { "fy","fy",       OFFSET(fy),     AV_OPT_TYPE_DOUBLE, {.dbl = 100}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "x","x",       OFFSET(x),     AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "y","y",       OFFSET(y),     AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "xn","xn",     OFFSET(xn),    AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "yn","yn",     OFFSET(yn),    AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "delta","d",   OFFSET(delta),   AV_OPT_TYPE_DOUBLE, {.dbl =  1}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "form","form", OFFSET(form),  AV_OPT_TYPE_INT,    {.i64 =  1}, 0,  20,  FLAGS },
+    { "count","count", OFFSET(count),  AV_OPT_TYPE_INT,    {.i64 =  1}, 0,  20,  FLAGS },
     { "dim","d",     OFFSET(dim),   AV_OPT_TYPE_INT,    {.i64 =  4}, 1,  255,  FLAGS },
     { "length","len",OFFSET(length), AV_OPT_TYPE_DOUBLE, {.dbl =  2*M_PI}, 0,  DBL_MAX,  FLAGS },
     { "start","s",   OFFSET(start), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, 0,  DBL_MAX,  FLAGS },
     { "rot","rot",   OFFSET(rot),   AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
-    { "rotn","rotn", OFFSET(rotn),  AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "nf0",  "nf0",   OFFSET(nf[0]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "nf1",  "nf1",   OFFSET(nf[1]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     { "nf2",  "nf2",   OFFSET(nf[2]),    AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
@@ -225,6 +222,7 @@ static const AVOption plotcurve_options[] = {
     { "c27","c27",   OFFSET(cp[2][7]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "c28","c28",   OFFSET(cp[2][8]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     { "c29","c29",   OFFSET(cp[2][9]), AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
+    { "mode","mode",OFFSET(mode), AV_OPT_TYPE_INT,    {.i64=0},    0,        100,        FLAGS },
     { "cmod","cmod",OFFSET(cmod), AV_OPT_TYPE_INT,    {.i64=0},    0,        2,        FLAGS },
     { "rgb","rgb",OFFSET(is_rgb), AV_OPT_TYPE_INT,    {.i64=0},    0,        1,        FLAGS },
     { "dbg","dbg",OFFSET(dbg), AV_OPT_TYPE_INT,    {.i64=0},    0,        1,        FLAGS },
@@ -262,8 +260,8 @@ static av_cold int plotcurve_init(AVFilterContext *ctx)
 {
     PlotCurveContext *plotcurve = ctx->priv;
     plotcurve->ctx = ctx;
-    av_log(ctx, AV_LOG_INFO, "rgb=%d ofs=%d x=%f y=%f xn=%f yn=%f, delta=%f start=%f length=%f fx=%f fy=%f dbg=%d\n", 
-            plotcurve->is_rgb, plotcurve->offset, plotcurve->x, plotcurve->y, plotcurve->xn, plotcurve->yn, 
+    av_log(ctx, AV_LOG_INFO, "rgb=%d ofs=%d x=%f y=%f delta=%f start=%f length=%f fx=%f fy=%f dbg=%d\n", 
+            plotcurve->is_rgb, plotcurve->offset, plotcurve->x, plotcurve->y, 
             plotcurve->delta, plotcurve->start, plotcurve->length, plotcurve->fx,plotcurve->fy,plotcurve->dbg);
     int k;
     for(k=0;k<10;k++) {
@@ -428,7 +426,9 @@ static void make_params(PlotCurveContext *plotcurve, GenutilFuncParams *params, 
     for(k=0;k<3;k++) {
         for(j=0;j<CMAXPARAMS;j++) params->cp[k][j] = plotcurve->cp[k][j];
     }
+    params->mode = plotcurve->mode;
     params->cmod = plotcurve->cmod;
+    params->count = plotcurve->count;
     params->delta = plotcurve->delta;
     params->start = plotcurve->start;
     params->length = plotcurve->length;
@@ -568,6 +568,7 @@ static void black_yuv(PlotCurveContext *plotcurve, AVFrame *in) {
 static int plotcurve_filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = inlink->dst;
+    srand(0);
     PlotCurveContext *plotcurve = ctx->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
     av_frame_make_writable(in);
