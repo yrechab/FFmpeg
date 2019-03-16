@@ -173,6 +173,17 @@ static long double complex hopalong(long double complex z, long double *p) {
     return x + I * y;
 }
 
+static long double complex hopalong_s(long double complex z, long double *p) {
+    long double a = p[0];
+    long double b = p[1];
+    long double c = p[2];
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    long double x =  y0 - sqrt(fabsl(b*x0-c));
+    long double y = a - x0;
+    return x + I * y;
+}
+
 static long double complex hopatest(long double complex z, long double *p) {
     long double a = p[0];
     long double b = p[1];
@@ -440,6 +451,7 @@ static IFunc ifuncs[] = {
     { "zero", izero },
     { "hopalong", hopalong },
     { "hopatest", hopatest },
+    { "hopalong_s", hopalong_s },
     { "mira", mira },
     { "kaneko", kaneko },
     { "ginger", ginger },
@@ -786,9 +798,10 @@ static void hopa1(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     int plane;
     int x0 = x-params->w/2;
     int y0 = y-params->h/2;
+    if(y0 == 0) y0 = 1;
     double len = params->p[0];
-    long double a = params->ip[0] + params->p[2] * (y0*params->fy+params->y);
-    long double b = params->ip[1] + params->p[3] * (x0*params->fx+params->x);
+    long double a = params->ip[0] + params->p[3] * (y0*params->fy+params->y);
+    long double b = params->ip[1] + params->p[2] * (x0*params->fx+params->x);
     long double c = params->ip[2];
     long double ip[] = { a, b, c, 0, 0 ,0, 0, 0, 0, 0 };
     int k;

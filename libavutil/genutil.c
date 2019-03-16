@@ -940,7 +940,7 @@ static void genutil_rndpoly_d(GenutilFuncParams *params, int n, double (*f)(int,
     srand(step);
     double *p1 = gen_poly_d(len,size,f,step,&params->p[4]);
     int nn = n%steplen;
-    if(nn >= pause) {
+    if(nn > pause) {
         srand(step+1);
         double *p2 = gen_poly_d(len,size,f,step+1,&params->p[4]);
         interpolate_poly(p1,p2,(double)(nn-pause)/(double)interval);
@@ -977,6 +977,14 @@ static double dfsin(int k, int n, double *pm) {
 
 static void genutil_poly_dsin(GenutilFuncParams *params, int n, AVFrame *in) {
     genutil_rndpoly_p_d(params,n,dfsin,in);
+}
+
+static double dfsink(int k, int n, double *pm) {
+    return sin(k*pm[0])*n*pm[1]*M_PI;
+}
+
+static void genutil_poly_dsink(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_rndpoly_p_d(params,n,dfsink,in);
 }
 
 static double dfq(int k, int n, double *pm) {
@@ -1777,6 +1785,7 @@ static GenutilFunc gfuncs[] = {
     {"polysin",genutil_poly_sin},
     {"polyq",genutil_poly_q},
     {"polyrnd",genutil_poly_rnd},
+    {"polydsink",genutil_poly_dsink},
     {"polydsin",genutil_poly_dsin},
     {"polydrnd",genutil_poly_drnd},
     {"polydq",genutil_poly_dq},
