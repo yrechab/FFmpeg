@@ -1881,7 +1881,7 @@ static double npoly(int n, double *p) {
 }
 
 static double nsin(int n, double *p) {
-    return (sin(p[0]*n - M_PI/2 + p[3])+1)*p[1]; 
+    return (sin(p[0]*n - M_PI/2 + p[3]))*p[1]+p[2]; 
 }
 
 static double linsin(int n, double *p) {
