@@ -796,11 +796,14 @@ static void hopa(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
 
 static void hopa1(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     int plane;
-    int x0 = x-params->w/2;
-    int y0 = y-params->h/2;
-    if(y0 == 0) y0 = 1;
+    long double x0 = x-params->w/2;
+    long double y0 = y-params->h/2;
+    long double complex zr = av_genutil_rotate(x0+I*y0,params->rot);
+    x0 = creall(zr);
+    y0 = cimagl(zr);
     double len = params->p[0];
-    long double a = params->ip[0] + params->p[3] * (y0*params->fy+params->y);
+    double y00 = y0*params->fy+params->y;
+    long double a = params->ip[0] + params->p[3] * (y00==0?params->fy:y00);
     long double b = params->ip[1] + params->p[2] * (x0*params->fx+params->x);
     long double c = params->ip[2];
     long double ip[] = { a, b, c, 0, 0 ,0, 0, 0, 0, 0 };
