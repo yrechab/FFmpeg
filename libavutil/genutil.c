@@ -1884,6 +1884,14 @@ static double nsin(int n, double *p) {
     return (sin(p[0]*n - M_PI/2 + p[3]))*p[1]+p[2]; 
 }
 
+static double rsin(int n, double *p) {
+    return (sin(p[0]*n + p[3]))*(p[1]==0.0?1:p[1])+p[2]; 
+}
+
+static double rcos(int n, double *p) {
+    return (cos(p[0]*n + p[3]))*(p[1]==0.0?1:p[1])+p[2]; 
+}
+
 static double linsin(int n, double *p) {
     return p[0]*n+(sin(p[1]*n + p[3]))*p[2]; 
 }
@@ -1968,6 +1976,8 @@ static NFunc nfuncs[] = {
     {"pchain",pchain},
     {"pval",pval},
     {"sin",nsin},
+    {"rsin",rsin},
+    {"rcos",rcos},
     {"inv",inv},
     {"gauss",gauss},
     {"sq",sqn},

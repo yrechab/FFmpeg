@@ -1181,6 +1181,18 @@ static void fdebug(FracFuncParams *params, int frame_number, AVFrame *in) {
     av_genutil_draw_int(params->w-50, params->h-16, frame_number, in, 2);
     //av_plot_form(1,params->w/2,params->h/2,1,params->w,params->h,in->linesize[0],in->data[0]);
 
+    av_genutil_draw_number(20, params->h-32, params->fx, in, 0);
+    av_genutil_draw_number(20, params->h-32, params->fx, in, 1);
+    av_genutil_draw_number(20, params->h-32, params->fx, in, 2);
+    av_genutil_draw_number(120, params->h-32, params->fy, in, 0);
+    av_genutil_draw_number(120, params->h-32, params->fy, in, 1);
+    av_genutil_draw_number(120, params->h-32, params->fy, in, 2);
+    av_genutil_draw_int(220, params->h-32, params->x, in, 0);
+    av_genutil_draw_int(220, params->h-32, params->x, in, 1);
+    av_genutil_draw_int(220, params->h-32, params->x, in, 2);
+    av_genutil_draw_int(320, params->h-32, params->y, in, 0);
+    av_genutil_draw_int(320, params->h-32, params->y, in, 1);
+    av_genutil_draw_int(320, params->h-32, params->y, in, 2);
 }
 
 
