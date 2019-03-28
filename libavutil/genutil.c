@@ -1875,6 +1875,122 @@ void av_genutil_parse_ffunc(const char *nf, double *p, void (**f)(GenutilFuncPar
 
 /* ============================= NFUNCS *******************************************/
 
+/*** spline ***/
+static int interpolate(double *p, double *out) {
+    /** Step 0 */
+    int n, i, j, end;
+    n = p[0];
+    n--;
+    //double x[n+1], a[n+1], h[n], A[n], l[n+1],
+    //    u[n+1], z[n+1], c[n+1], b[n], d[n];
+    double *x = calloc(n+1, sizeof(double));
+    double *a = calloc(n+1, sizeof(double));
+    double *h = calloc(n, sizeof(double));
+    double *A = calloc(n, sizeof(double));
+    double *l = calloc(n+1, sizeof(double));
+    double *u = calloc(n+1, sizeof(double));
+    double *z = calloc(n+1, sizeof(double));
+    double *c = calloc(n+1, sizeof(double));
+    double *b = calloc(n, sizeof(double));
+    double *d = calloc(n, sizeof(double));
+    for (i = 0; i < n + 1; ++i) {
+        x[i] = p[i*2+1];
+    }
+    end = x[n+1];
+    //scanf("%lf", &x[i]);
+    for (i = 0; i < n + 1; ++i) {
+        a[i] = p[i*2+2];
+    }
+    //scanf("%lf", &a[i]);
+
+    /** Step 1 */
+    for (i = 0; i <= n - 1; ++i) h[i] = x[i + 1] - x[i];
+
+    /** Step 2 */
+    for (i = 1; i <= n - 1; ++i)
+        A[i] = 3 * (a[i + 1] - a[i]) / h[i] - 3 * (a[i] - a[i - 1]) / h[i - 1];
+
+    /** Step 3 */
+    l[0] = 1;
+    u[0] = 0;
+    z[0] = 0;
+
+    /** Step 4 */
+    for (i = 1; i <= n - 1; ++i) {
+        l[i] = 2 * (x[i + 1] - x[i - 1]) - h[i - 1] * u[i - 1];
+        u[i] = h[i] / l[i];
+        z[i] = (A[i] - h[i - 1] * z[i - 1]) / l[i];
+    }
+
+    /** Step 5 */
+    l[n] = 1;
+    z[n] = 0;
+    c[n] = 0;
+
+    /** Step 6 */
+    for (j = n - 1; j >= 0; --j) {
+        c[j] = z[j] - u[j] * c[j + 1];
+        b[j] = (a[j + 1] - a[j]) / h[j] - h[j] * (c[j + 1] + 2 * c[j]) / 3;
+        d[j] = (c[j + 1] - c[j]) / (3 * h[j]);
+    }
+    
+    /** Step 7 */
+    //printf("%2s %8s %8s %8s %8s\n", "i", "ai", "bi", "ci", "di");
+    out[0] = n+1;
+    out[1] = end;
+    for (i = 0; i < n; ++i) {
+        out[i*5+2] = x[i];
+        out[i*5+3] = a[i];
+        out[i*5+4] = b[i];
+        out[i*5+5] = c[i];
+        out[i*5+6] = d[i];
+    }
+    //    printf("%2d %.16f %2.16f %2.16f %2.16f\n", i, a[i], b[i], c[i], d[i]);
+    free(x);
+    free(a);
+    free(h);
+    free(A);
+    free(l);
+    free(u);
+    free(z);
+    free(c);
+    free(b);
+    free(d);
+    return 0;
+}
+
+static double p3(int n, double a,double b,double c,double d) {
+    return a + n*b + n*n*c + n*n*n*d;
+}
+
+static double pcubic(int n, double *p) {
+    int len = p[0];
+    int end = p[1];
+    int k,index;
+    for(k=1;k<len;k++) {
+        if(n<p[k*5+2]) {
+            index = (k-1)*5 +2;
+            return p3(n-p[index],p[index+1],p[index+2],p[index+3],p[index+4]);
+        } 
+    }
+    if(n<end) {
+        index = (len-1)*5+2;
+        return p3(n-p[index],p[index+1],p[index+2],p[index+3],p[index+4]);
+    } else {
+        index = (len-1)*5+2;
+        return p3(end,p[index+1],p[index+2],p[index+3],p[index+4]);
+    }
+}
+
+static double pspline(int n, double *p) {
+    int len = p[0];
+    double *out = calloc(len*5+2, sizeof(double));
+    interpolate(p,out);
+    double ret =  pcubic(n,out);
+    free(out);
+    return ret;
+}
+
 static double npoly(int n, double *p) {
     double x = (double)n * p[0];
     return p[1] + p[2]*x + p[3]*x+x + p[4]*x*x*x + p[5]*x*x*x*x;
@@ -1974,6 +2090,8 @@ static NFunc nfuncs[] = {
     {"linsin",linsin},
     {"poly",npoly},
     {"pchain",pchain},
+    {"pcubic",pcubic},
+    {"pspline",pspline},
     {"pval",pval},
     {"sin",nsin},
     {"rsin",rsin},

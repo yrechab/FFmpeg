@@ -65,7 +65,7 @@ typedef struct FracContext {
     long double ip[40];
     int ifcmode;
     const char *nf[10];
-    double np[10][10];
+    double np[10][100];
     int nmod[10]; // modulo n
     double (*nfunc[10])(int,double*);
     const char *cf[3];
@@ -1052,9 +1052,9 @@ static void make_params(FracContext *frac, FracFuncParams *params, int frame_num
     params->sat = frac->sat;
     params->fac = frac->fac;
 
-    double np[10][10];
+    double np[10][100];
     for(k=0;k<10;k++) {
-        for(j=0;j<10;j++) {
+        for(j=0;j<100;j++) {
             np[k][j] = frac->np[k][j];
         }
     }
@@ -1193,6 +1193,9 @@ static void fdebug(FracFuncParams *params, int frame_number, AVFrame *in) {
     av_genutil_draw_int(320, params->h-32, params->y, in, 0);
     av_genutil_draw_int(320, params->h-32, params->y, in, 1);
     av_genutil_draw_int(320, params->h-32, params->y, in, 2);
+    av_genutil_draw_number(420, params->h-32, params->rot, in, 0);
+    av_genutil_draw_number(420, params->h-32, params->rot, in, 1);
+    av_genutil_draw_number(420, params->h-32, params->rot, in, 2);
 }
 
 
