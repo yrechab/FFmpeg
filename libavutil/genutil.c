@@ -1936,7 +1936,7 @@ static int interpolate(double *p, double *out) {
     
     /** Step 7 */
     //printf("%2s %8s %8s %8s %8s\n", "i", "ai", "bi", "ci", "di");
-    out[0] = n+1;
+    out[0] = n;
     out[1] = end;
     for (i = 0; i < n; ++i) {
         out[i*5+2] = x[i];
