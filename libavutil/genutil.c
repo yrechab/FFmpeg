@@ -367,20 +367,26 @@ double complex av_genutil_cornoid(double t, double *p) {
 
 /******************** UTIL ****************************/
 void av_genutil_draw_number(int x, int y, double z, AVFrame *in, int plane) {
+    av_genutil_draw_number_c(x,y,z,1,in,plane);
+}
+void av_genutil_draw_number_c(int x, int y, double z, double val, AVFrame *in, int plane) {
     if(plane == -1) { // packed rgb
         uint8_t color[] = {255,255,255,255};
         av_plot_number_p(x,y,z,color,in->width,in->height,in->linesize[0],in->data[0]);
     } else {
-        av_plot_number(x,y,z,in->width,in->height,in->linesize[plane],in->data[plane]);
+        av_plot_number_c(x,y,z,val, in->width,in->height,in->linesize[plane],in->data[plane]);
     }
 }
 
 void av_genutil_draw_int(int x, int y, int n, AVFrame *in,int plane) {
+    av_genutil_draw_int_c(x,y,n,1,in,plane);
+}
+void av_genutil_draw_int_c(int x, int y, int n, double val, AVFrame *in,int plane) {
     if(plane == -1) { // packed rgb
         uint8_t color[] = {255,255,255,255};
         av_plot_int_p(x,y,n,color,in->width,in->height,in->linesize[0],in->data[0]);
     } else {
-        av_plot_int(x,y,n,in->width,in->height,in->linesize[plane],in->data[plane]);
+        av_plot_int_c(x,y,n,val,in->width,in->height,in->linesize[plane],in->data[plane]);
     }
 }
 
@@ -1896,7 +1902,7 @@ static int interpolate(double *p, double *out) {
     for (i = 0; i < n + 1; ++i) {
         x[i] = p[i*2+1];
     }
-    end = x[n+1];
+    end = x[n];
     //scanf("%lf", &x[i]);
     for (i = 0; i < n + 1; ++i) {
         a[i] = p[i*2+2];
@@ -1960,7 +1966,7 @@ static int interpolate(double *p, double *out) {
 }
 
 static double p3(int n, double a,double b,double c,double d) {
-    return a + n*b + n*n*c + n*n*n*d;
+    return a + b*n + c*n*n + d*n*n*n;
 }
 
 static double pcubic(int n, double *p) {
@@ -1978,7 +1984,7 @@ static double pcubic(int n, double *p) {
         return p3(n-p[index],p[index+1],p[index+2],p[index+3],p[index+4]);
     } else {
         index = (len-1)*5+2;
-        return p3(end,p[index+1],p[index+2],p[index+3],p[index+4]);
+        return p3(end-p[index],p[index+1],p[index+2],p[index+3],p[index+4]);
     }
 }
 

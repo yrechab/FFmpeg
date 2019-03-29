@@ -144,7 +144,7 @@ static uint8_t numbers[12][8] = {
 
 };
 
-static void av_plot_ch(char ch, int x, int y, int w, int h, int linesize, uint8_t *buf) {
+static void av_plot_ch(char ch, double val, int x, int y, int w, int h, int linesize, uint8_t *buf) {
     uint8_t *bmp;
     if(ch == '.') {
         bmp = numbers[10];
@@ -160,31 +160,38 @@ static void av_plot_ch(char ch, int x, int y, int w, int h, int linesize, uint8_
         uint8_t b = bmp[k];
         for(j=0;j<8;j++) {
             if( (1 << 7-j)&b) {
-                av_plot_pix(x+j,y+k,1,w,h,linesize,buf);
+                av_plot_pix(x+j,y+k,val,w,h,linesize,buf);
             }
         }
     }
 }
 
 void av_plot_number(int x, int y, double z, int w, int h, int linesize, uint8_t *buf) {
+    av_plot_number_c(x,y,z,1,w,h,linesize,buf);
+}
+void av_plot_number_c(int x, int y, double z, double val, int w, int h, int linesize, uint8_t *buf) {
     char s[50];
     sprintf(s,"%lf",z);
     char *ptr = s;
     int k = 0;
     while(*ptr) {
-        av_plot_ch(*ptr,x+k,y,w,h,linesize,buf);
+        av_plot_ch(*ptr,val,x+k,y,w,h,linesize,buf);
         ptr++;
         k+=9;
     }
 }
 
 void av_plot_int(int x, int y, int n, int w, int h, int linesize, uint8_t *buf) {
+    av_plot_int_c(x,y,n,1,w,h,linesize,buf);
+
+}
+void av_plot_int_c(int x, int y, int n, double val, int w, int h, int linesize, uint8_t *buf) {
     char s[50];
     sprintf(s,"%d",n);
     char *ptr = s;
     int k = 0;
     while(*ptr) {
-        av_plot_ch(*ptr,x+k,y,w,h,linesize,buf);
+        av_plot_ch(*ptr,val,x+k,y,w,h,linesize,buf);
         ptr++;
         k+=9;
     }

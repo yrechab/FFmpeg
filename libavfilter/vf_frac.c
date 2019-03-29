@@ -1159,43 +1159,43 @@ static void make_params(FracContext *frac, FracFuncParams *params, int frame_num
 static void fdebug(FracFuncParams *params, int frame_number, AVFrame *in) {
     int k;
     for(k=0;k<4;k++) {
-        av_genutil_draw_number(k*100+20, params->h-16, params->p[k], in, 0);
-        av_genutil_draw_number(k*100+20, params->h-16, params->p[k], in, 1);
-        av_genutil_draw_number(k*100+20, params->h-16, params->p[k], in, 2);
+        av_genutil_draw_number_c(k*100+20, params->h-16, params->p[k], 0, in, 0);
+        av_genutil_draw_number_c(k*100+20, params->h-16, params->p[k], 0, in, 1);
+        av_genutil_draw_number_c(k*100+20, params->h-16, params->p[k], 0, in, 2);
     }
     for(k=4;k<8;k++) {
-        av_genutil_draw_number(k*100+20, params->h-16, params->ip[k-4], in, 0);
-        av_genutil_draw_number(k*100+20, params->h-16, params->ip[k-4], in, 1);
-        av_genutil_draw_number(k*100+20, params->h-16, params->ip[k-4], in, 2);
+        av_genutil_draw_number_c(k*100+20, params->h-16, params->ip[k-4], 0, in, 0);
+        av_genutil_draw_number_c(k*100+20, params->h-16, params->ip[k-4], 0, in, 1);
+        av_genutil_draw_number_c(k*100+20, params->h-16, params->ip[k-4], 0, in, 2);
     }
-    av_genutil_draw_number(k*100+20, params->h-16, params->fac, in, 0);
-    av_genutil_draw_number(k*100+20, params->h-16, params->fac, in, 1);
-    av_genutil_draw_number(k*100+20, params->h-16, params->fac, in, 2);
+    av_genutil_draw_number_c(k*100+20, params->h-16, params->fac, 0, in, 0);
+    av_genutil_draw_number_c(k*100+20, params->h-16, params->fac, 0, in, 1);
+    av_genutil_draw_number_c(k*100+20, params->h-16, params->fac, 0, in, 2);
     k++;
-    av_genutil_draw_number(k*100+20, params->h-16, params->sat, in, 0);
-    av_genutil_draw_number(k*100+20, params->h-16, params->sat, in, 1);
-    av_genutil_draw_number(k*100+20, params->h-16, params->sat, in, 2);
+    av_genutil_draw_number_c(k*100+20, params->h-16, params->sat, 0, in, 0);
+    av_genutil_draw_number_c(k*100+20, params->h-16, params->sat, 0, in, 1);
+    av_genutil_draw_number_c(k*100+20, params->h-16, params->sat, 0, in, 2);
     
-    av_genutil_draw_int(params->w-50, params->h-16, frame_number, in, 0);
-    av_genutil_draw_int(params->w-50, params->h-16, frame_number, in, 1);
-    av_genutil_draw_int(params->w-50, params->h-16, frame_number, in, 2);
+    av_genutil_draw_int_c(params->w-50, params->h-16, frame_number, 0, in, 0);
+    av_genutil_draw_int_c(params->w-50, params->h-16, frame_number, 0, in, 1);
+    av_genutil_draw_int_c(params->w-50, params->h-16, frame_number, 0, in, 2);
     //av_plot_form(1,params->w/2,params->h/2,1,params->w,params->h,in->linesize[0],in->data[0]);
 
-    av_genutil_draw_number(20, params->h-32, params->fx, in, 0);
-    av_genutil_draw_number(20, params->h-32, params->fx, in, 1);
-    av_genutil_draw_number(20, params->h-32, params->fx, in, 2);
-    av_genutil_draw_number(120, params->h-32, params->fy, in, 0);
-    av_genutil_draw_number(120, params->h-32, params->fy, in, 1);
-    av_genutil_draw_number(120, params->h-32, params->fy, in, 2);
-    av_genutil_draw_int(220, params->h-32, params->x, in, 0);
-    av_genutil_draw_int(220, params->h-32, params->x, in, 1);
-    av_genutil_draw_int(220, params->h-32, params->x, in, 2);
-    av_genutil_draw_int(320, params->h-32, params->y, in, 0);
-    av_genutil_draw_int(320, params->h-32, params->y, in, 1);
-    av_genutil_draw_int(320, params->h-32, params->y, in, 2);
-    av_genutil_draw_number(420, params->h-32, params->rot, in, 0);
-    av_genutil_draw_number(420, params->h-32, params->rot, in, 1);
-    av_genutil_draw_number(420, params->h-32, params->rot, in, 2);
+    av_genutil_draw_number_c(20, params->h-32, params->fx, 0, in, 0);
+    av_genutil_draw_number_c(20, params->h-32, params->fx, 0, in, 1);
+    av_genutil_draw_number_c(20, params->h-32, params->fx, 0, in, 2);
+    av_genutil_draw_number_c(120, params->h-32, params->fy, 0, in, 0);
+    av_genutil_draw_number_c(120, params->h-32, params->fy, 0, in, 1);
+    av_genutil_draw_number_c(120, params->h-32, params->fy, 0, in, 2);
+    av_genutil_draw_int_c(220, params->h-32, params->x, 0, in, 0);
+    av_genutil_draw_int_c(220, params->h-32, params->x, 0, in, 1);
+    av_genutil_draw_int_c(220, params->h-32, params->x, 0, in, 2);
+    av_genutil_draw_int_c(320, params->h-32, params->y, 0, in, 0);
+    av_genutil_draw_int_c(320, params->h-32, params->y, 0, in, 1);
+    av_genutil_draw_int_c(320, params->h-32, params->y, 0, in, 2);
+    av_genutil_draw_number_c(420, params->h-32, params->rot, 0, in, 0);
+    av_genutil_draw_number_c(420, params->h-32, params->rot, 0, in, 1);
+    av_genutil_draw_number_c(420, params->h-32, params->rot, 0, in, 2);
 }
 
 
