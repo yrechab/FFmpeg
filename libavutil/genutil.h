@@ -129,4 +129,6 @@ void av_genutil_draw_number(int x, int y, double z, AVFrame *in, int plane);
 void av_genutil_draw_int(int x, int y, int n, AVFrame *in,int plane);
 void av_genutil_draw_number_c(int x, int y, double z, double val, AVFrame *in, int plane);
 void av_genutil_draw_int_c(int x, int y, int n, double val, AVFrame *in,int plane);
+int av_genutil_spline(double *p, double *out);
+double complex av_genutil_spline_2d(double t, double *p);
 #endif

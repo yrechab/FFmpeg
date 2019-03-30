@@ -15,6 +15,91 @@ double complex av_genutil_rotate(double complex z, double phi) {
     return phi!=0.0?(cos(phi) + sin(phi)*I) * z:z;
 }
 
+int av_genutil_spline(double *p, double *out) {
+    /** Step 0 */
+    int n, i, j, end;
+    n = p[0];
+    n--;
+    double *x = calloc(n+1, sizeof(double));
+    double *a = calloc(n+1, sizeof(double));
+    double *h = calloc(n, sizeof(double));
+    double *A = calloc(n, sizeof(double));
+    double *l = calloc(n+1, sizeof(double));
+    double *u = calloc(n+1, sizeof(double));
+    double *z = calloc(n+1, sizeof(double));
+    double *c = calloc(n+1, sizeof(double));
+    double *b = calloc(n, sizeof(double));
+    double *d = calloc(n, sizeof(double));
+    for (i = 0; i < n + 1; ++i) {
+        x[i] = p[i*2+1];
+    }
+    end = x[n];
+    //scanf("%lf", &x[i]);
+    for (i = 0; i < n + 1; ++i) {
+        a[i] = p[i*2+2];
+    }
+    //scanf("%lf", &a[i]);
+
+    /** Step 1 */
+    for (i = 0; i <= n - 1; ++i) {
+        h[i] = x[i + 1] - x[i];
+        if(h[i] == 0) h[i] = 0.0001;
+    }
+
+    /** Step 2 */
+    for (i = 1; i <= n - 1; ++i)
+        A[i] = 3 * (a[i + 1] - a[i]) / h[i] - 3 * (a[i] - a[i - 1]) / h[i - 1];
+
+    /** Step 3 */
+    l[0] = 1;
+    u[0] = 0;
+    z[0] = 0;
+
+    /** Step 4 */
+    for (i = 1; i <= n - 1; ++i) {
+        l[i] = 2 * (x[i + 1] - x[i - 1]) - h[i - 1] * u[i - 1];
+        u[i] = h[i] / l[i];
+        z[i] = (A[i] - h[i - 1] * z[i - 1]) / l[i];
+    }
+
+    /** Step 5 */
+    l[n] = 1;
+    z[n] = 0;
+    c[n] = 0;
+
+    /** Step 6 */
+    for (j = n - 1; j >= 0; --j) {
+        c[j] = z[j] - u[j] * c[j + 1];
+        b[j] = (a[j + 1] - a[j]) / h[j] - h[j] * (c[j + 1] + 2 * c[j]) / 3;
+        d[j] = (c[j + 1] - c[j]) / (3 * h[j]);
+    }
+    
+    /** Step 7 */
+    //printf("%2s %8s %8s %8s %8s\n", "i", "ai", "bi", "ci", "di");
+    out[0] = n;
+    out[1] = end;
+    for (i = 0; i < n; ++i) {
+        out[i*5+2] = x[i];
+        out[i*5+3] = a[i];
+        out[i*5+4] = b[i];
+        out[i*5+5] = c[i];
+        out[i*5+6] = d[i];
+    }
+    //    printf("%2d %.16f %2.16f %2.16f %2.16f\n", i, a[i], b[i], c[i], d[i]);
+    free(x);
+    free(a);
+    free(h);
+    free(A);
+    free(l);
+    free(u);
+    free(z);
+    free(c);
+    free(b);
+    free(d);
+    return 0;
+}
+
+
 static double complex av_genutil_line_p(double t, double x0, double y0, double x1, double y1,double *next) {
     int steep = fabs(y1 - y0) > fabs(x1 - x0);
     double tmp;
@@ -127,6 +212,33 @@ double complex av_genutil_line(double t, double *p) {
     double complex ret = av_genutil_line_p(t,p[0],p[1],p[2],p[3],&dummy);
     return ret;
 }
+
+static double p3d(double x, double a, double b, double c, double d) {
+    return a + b*x + c*x*x + d*x*x*x;
+}
+
+double complex av_genutil_spline_2d(double t, double *p) {
+    int len = p[0];
+    double end = p[1];
+    int k, index;
+    double x,y,t0;
+    double tm = fmod(t,end);
+    for(k=1;k<len;k++) {
+        if(tm<p[k*9+2]) {
+            index = (k-1)*9+2;
+            t0 = tm-p[index];
+            x = p3d(t0,p[index+1],p[index+2],p[index+3],p[index+4]);
+            y = p3d(t0,p[index+5],p[index+6],p[index+7],p[index+8]);
+            return x + I * y;
+        }    
+    }
+    index = (len-1)*9+2;
+    t0 = tm-p[index];
+    x = p3d(t0,p[index+1],p[index+2],p[index+3],p[index+4]);
+    y = p3d(t0,p[index+5],p[index+6],p[index+7],p[index+8]);
+    return x + I * y;
+}
+
 double complex av_genutil_circ(double t,  double *p) {
     return p[0] * cos(t) + I * p[1] * sin(t);
 }
@@ -545,6 +657,79 @@ static void colored_curve2(GenutilFuncParams *params, PFUNC(f), AVFrame *in) {
         t+=params->delta;
     }
 }
+    
+static void logParameters(AVFilterContext *ctx,double* p, int len, int debug) {
+    int k;
+    for(k=0;k<len;k++) {
+        av_log(ctx, debug?AV_LOG_DEBUG:AV_LOG_INFO," %f",p[k]); 
+    }
+    av_log(ctx, debug?AV_LOG_DEBUG:AV_LOG_INFO,"\n"); 
+}
+
+
+static void colored_spline(GenutilFuncParams *params, AVFrame *in) {
+    int len = params->p[0];
+    double *tarr = calloc(len,sizeof(double));
+    tarr[0] = 0;
+    for(int i=1;i<len;i++) {
+        double lx = params->p[1+i*2] - params->p[1+(i-1)*2];
+        double ly = params->p[2+i*2] - params->p[2+(i-1)*2];
+        if(lx == 0.0) tarr[i] = fabs(ly);
+        else if(ly == 0.0) tarr[i] = fabs(lx);
+        else tarr[i]=sqrt(lx*lx+ly*ly);
+        tarr[i]+=tarr[i-1];
+    }
+    double *inputX = calloc(len*2+1,sizeof(double));
+    double *inputY = calloc(len*2+1,sizeof(double));
+    inputX[0]=len;
+    inputY[0]=len;
+    for(int i=0;i<len;i++) {
+        inputX[1+i*2] = tarr[i];
+        inputX[2+i*2] = params->p[1+i*2];
+        inputY[1+i*2] = tarr[i];
+        inputY[2+i*2] = params->p[2+i*2];
+    }
+    double *outputX = calloc(2+len*5,sizeof(double));
+    double *outputY = calloc(2+len*5,sizeof(double));
+    av_genutil_spline(inputX,outputX);
+    av_genutil_spline(inputY,outputY);
+    double *splineInput = calloc(2+inputX[0]*9,sizeof(double));
+    splineInput[0]=outputX[0];
+    splineInput[1]=outputX[1];
+    for(int i=0;i<outputX[0];i++) {
+        splineInput[2+i*9]=outputX[2+i*5];
+        splineInput[3+i*9]=outputX[3+i*5];
+        splineInput[4+i*9]=outputX[4+i*5];
+        splineInput[5+i*9]=outputX[5+i*5];
+        splineInput[6+i*9]=outputX[6+i*5];
+        splineInput[7+i*9]=outputY[3+i*5];
+        splineInput[8+i*9]=outputY[4+i*5];
+        splineInput[9+i*9]=outputY[5+i*5];
+        splineInput[10+i*9]=outputY[6+i*5];
+    }
+    logParameters(params->ctx,outputX,2+len*5,1);
+    logParameters(params->ctx,outputY,2+len*5,1);
+    logParameters(params->ctx,splineInput,2+outputX[0]*9,1);
+    double t = params->start;
+    while(t<params->start+params->length) {
+        double colors[3];
+        double complex _z = av_genutil_spline_2d(t,splineInput);
+        double complex z = av_genutil_rotate(_z,params->rot);
+        int x = floor(params->fx*creal(z) + params->w/2) + params->x;
+        int y = floor(params->fy*cimag(z) + params->h/2) + params->y;
+        av_genutil_get_color(params->cfunc, params->cp,t,params->cmod, params->is_rgb, colors);
+        av_plot_form(params->form,x,y,colors[0],params->w,params->h,in->linesize[0],in->data[0]);
+        av_plot_form(params->form,x,y,colors[1],params->w,params->h,in->linesize[1],in->data[1]);
+        av_plot_form(params->form,x,y,colors[2],params->w,params->h,in->linesize[2],in->data[2]);
+        t+=params->delta;
+    }
+    free(tarr);
+    free(inputX);
+    free(inputY);
+    free(splineInput);
+    free(outputX);
+    free(outputY);
+}
 
 static void set_alpha(GenutilFuncParams *params, AVFrame *in, double t, PFUNC(f), double a,double alpha,int ofsX, int ofsY) {
     double complex _z = f(t,params->p);
@@ -557,7 +742,6 @@ static void set_alpha(GenutilFuncParams *params, AVFrame *in, double t, PFUNC(f)
         av_plot_form(params->form,x,y,a,params->w,params->h,in->linesize[3],in->data[3]);
     }
 }
-
 
 static void curve(GenutilFuncParams *params, PFUNC(f),int n, AVFrame *in) {
     double count = params->count;
@@ -730,6 +914,10 @@ static void genutil_line(GenutilFuncParams *params, int n, AVFrame *in) {
 
 static void genutil_poly(GenutilFuncParams *params, int n, AVFrame *in) {
     colored_curve(params,av_genutil_poly,in);
+}
+
+static void genutil_spline(GenutilFuncParams *params, int n, AVFrame *in) {
+    colored_spline(params,in);
 }
 
 static void genutil_addoid(GenutilFuncParams *params, int n, AVFrame *in) {
@@ -1785,6 +1973,7 @@ static GenutilFunc gfuncs[] = {
     {"cornoid",genutil_cornoid},
     {"line",genutil_line},
     {"poly",genutil_poly},
+    {"spline",genutil_spline},
     {"polymul",genutil_poly_mul},
     {"polymod",genutil_poly_mod},
     {"polymod1",genutil_poly_mod1},
@@ -1882,89 +2071,6 @@ void av_genutil_parse_ffunc(const char *nf, double *p, void (**f)(GenutilFuncPar
 /* ============================= NFUNCS *******************************************/
 
 /*** spline ***/
-static int interpolate(double *p, double *out) {
-    /** Step 0 */
-    int n, i, j, end;
-    n = p[0];
-    n--;
-    //double x[n+1], a[n+1], h[n], A[n], l[n+1],
-    //    u[n+1], z[n+1], c[n+1], b[n], d[n];
-    double *x = calloc(n+1, sizeof(double));
-    double *a = calloc(n+1, sizeof(double));
-    double *h = calloc(n, sizeof(double));
-    double *A = calloc(n, sizeof(double));
-    double *l = calloc(n+1, sizeof(double));
-    double *u = calloc(n+1, sizeof(double));
-    double *z = calloc(n+1, sizeof(double));
-    double *c = calloc(n+1, sizeof(double));
-    double *b = calloc(n, sizeof(double));
-    double *d = calloc(n, sizeof(double));
-    for (i = 0; i < n + 1; ++i) {
-        x[i] = p[i*2+1];
-    }
-    end = x[n];
-    //scanf("%lf", &x[i]);
-    for (i = 0; i < n + 1; ++i) {
-        a[i] = p[i*2+2];
-    }
-    //scanf("%lf", &a[i]);
-
-    /** Step 1 */
-    for (i = 0; i <= n - 1; ++i) h[i] = x[i + 1] - x[i];
-
-    /** Step 2 */
-    for (i = 1; i <= n - 1; ++i)
-        A[i] = 3 * (a[i + 1] - a[i]) / h[i] - 3 * (a[i] - a[i - 1]) / h[i - 1];
-
-    /** Step 3 */
-    l[0] = 1;
-    u[0] = 0;
-    z[0] = 0;
-
-    /** Step 4 */
-    for (i = 1; i <= n - 1; ++i) {
-        l[i] = 2 * (x[i + 1] - x[i - 1]) - h[i - 1] * u[i - 1];
-        u[i] = h[i] / l[i];
-        z[i] = (A[i] - h[i - 1] * z[i - 1]) / l[i];
-    }
-
-    /** Step 5 */
-    l[n] = 1;
-    z[n] = 0;
-    c[n] = 0;
-
-    /** Step 6 */
-    for (j = n - 1; j >= 0; --j) {
-        c[j] = z[j] - u[j] * c[j + 1];
-        b[j] = (a[j + 1] - a[j]) / h[j] - h[j] * (c[j + 1] + 2 * c[j]) / 3;
-        d[j] = (c[j + 1] - c[j]) / (3 * h[j]);
-    }
-    
-    /** Step 7 */
-    //printf("%2s %8s %8s %8s %8s\n", "i", "ai", "bi", "ci", "di");
-    out[0] = n;
-    out[1] = end;
-    for (i = 0; i < n; ++i) {
-        out[i*5+2] = x[i];
-        out[i*5+3] = a[i];
-        out[i*5+4] = b[i];
-        out[i*5+5] = c[i];
-        out[i*5+6] = d[i];
-    }
-    //    printf("%2d %.16f %2.16f %2.16f %2.16f\n", i, a[i], b[i], c[i], d[i]);
-    free(x);
-    free(a);
-    free(h);
-    free(A);
-    free(l);
-    free(u);
-    free(z);
-    free(c);
-    free(b);
-    free(d);
-    return 0;
-}
-
 static double p3(int n, double a,double b,double c,double d) {
     return a + b*n + c*n*n + d*n*n*n;
 }
@@ -1991,7 +2097,7 @@ static double pcubic(int n, double *p) {
 static double pspline(int n, double *p) {
     int len = p[0];
     double *out = calloc(len*5+2, sizeof(double));
-    interpolate(p,out);
+    av_genutil_spline(p,out);
     double ret =  pcubic(n,out);
     free(out);
     return ret;
