@@ -173,6 +173,43 @@ static long double complex hopalong(long double complex z, long double *p) {
     return x + I * y;
 }
 
+static long double complex hopalongsin(long double complex z, long double *p) {
+    long double a = p[0];
+    long double b = p[1];
+    long double c = p[2];
+    long double d = p[3];
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    long double xx = fabsl(b*x0-c);
+    long double x =  y0 - SIGN(x0)*sqrt(xx + sin(d*xx));
+    long double y = a - x0;
+    return x + I * y;
+}
+
+static long double complex hopalongp(long double complex z, long double *p) {
+    long double a = p[0];
+    long double b = p[1];
+    long double c = p[2];
+    long double d = p[3];
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    long double x =  y0 - SIGN(x0)*pow(fabsl(b*x0-c),d);
+    long double y = a - x0;
+    return x + I * y;
+}
+
+static long double complex hopalonglog(long double complex z, long double *p) {
+    long double a = p[0];
+    long double b = p[1];
+    long double c = p[2];
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    long double x =  y0 - SIGN(x0)*log(fabsl(b*x0-c));
+    long double y = a - x0;
+    return x + I * y;
+}
+
+
 static long double complex hopalong_s(long double complex z, long double *p) {
     long double a = p[0];
     long double b = p[1];
@@ -450,6 +487,9 @@ static long double complex vrnd(long double complex z, long double *p) {
 static IFunc ifuncs[] = {
     { "zero", izero },
     { "hopalong", hopalong },
+    { "hopalongp", hopalongp },
+    { "hopalongsin", hopalongsin },
+    { "hopalonglog", hopalonglog },
     { "hopatest", hopatest },
     { "hopalong_s", hopalong_s },
     { "mira", mira },
@@ -735,8 +775,15 @@ static void m(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     int plane;
     double len = params->p[0];
     int k;
-    long double x0 = (x-params->w/2)*params->fx+params->x; 
-    long double y0 = (y-params->h/2)*params->fy+params->y;
+    long double xr0 = x-params->w/2;
+    long double yr0 = y-params->h/2;
+    long double complex zr = av_genutil_rotate(xr0+I*yr0,params->rot);
+    xr0 = creall(zr);
+    yr0 = cimagl(zr);
+    //long double x0 = (x-params->w/2)*params->fx+params->x; 
+    //long double y0 = (y-params->h/2)*params->fy+params->y;
+    long double x0 = xr0*params->fx+params->x; 
+    long double y0 = yr0*params->fy+params->y;
     long double ip[] = { x0, y0 };
     long double complex z = 0;
     double max=0;
@@ -806,7 +853,8 @@ static void hopa1(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     long double a = params->ip[0] + params->p[3] * (y00==0?params->fy:y00);
     long double b = params->ip[1] + params->p[2] * (x0*params->fx+params->x);
     long double c = params->ip[2];
-    long double ip[] = { a, b, c, 0, 0 ,0, 0, 0, 0, 0 };
+    long double d = params->ip[3];
+    long double ip[] = { a, b, c, d, 0 ,0, 0, 0, 0, 0 };
     int k;
     long double complex z = params->p[4] + I * params->p[5];
     double max=0;
@@ -1179,7 +1227,7 @@ static void fdebug(FracFuncParams *params, int frame_number, AVFrame *in) {
     av_genutil_draw_int_c(params->w-50, params->h-16, frame_number, 0, in, 0);
     av_genutil_draw_int_c(params->w-50, params->h-16, frame_number, 0, in, 1);
     av_genutil_draw_int_c(params->w-50, params->h-16, frame_number, 0, in, 2);
-    //av_plot_form(1,params->w/2,params->h/2,1,params->w,params->h,in->linesize[0],in->data[0]);
+    av_plot_form(1,params->w/2,params->h/2,1,params->w,params->h,in->linesize[0],in->data[0]);
 
     av_genutil_draw_number_c(20, params->h-32, params->fx, 0, in, 0);
     av_genutil_draw_number_c(20, params->h-32, params->fx, 0, in, 1);

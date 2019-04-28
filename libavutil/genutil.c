@@ -2001,7 +2001,7 @@ static GenutilFunc gfuncs[] = {
     {"lmtest2",genutil_lindenmeyer_t2},
     {"addoid",genutil_addoid},
     {"phypo",genutil_phypo},
-    {"pkardiods",genutil_pkardioids},
+    {"pkardioids",genutil_pkardioids},
     {"plemg",genutil_plemg},
     {"plemb",genutil_plemb},
     {"pepi",genutil_pepi},

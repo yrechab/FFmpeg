@@ -263,7 +263,7 @@ int av_image_check_size2(unsigned int w, unsigned int h, int64_t max_pixels, enu
     stride += 128*8;
 
     if ((int)w<=0 || (int)h<=0 || stride >= INT_MAX || stride*(uint64_t)(h+128) >= INT_MAX) {
-        av_log(&imgutils, AV_LOG_ERROR, "Picture size %ux%u is invalid\n", w, h);
+        av_log(&imgutils, AV_LOG_ERROR, "Picture size %ux%u is invalid %u %u \n", w, h, stride, INT_MAX);
         return AVERROR(EINVAL);
     }
 
