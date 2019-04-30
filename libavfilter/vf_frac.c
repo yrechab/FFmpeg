@@ -870,6 +870,8 @@ static void hopa1(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
         }
         if(params->ifcmode == 2) {
             if(fabsl(creall(z)) > max) max = (fabsl(creall(z)));
+        } else if(params->ifcmode ==3) {
+            if(cabsl(z) > max) max = cabsl(z);
         }
     }
     double colors[3];

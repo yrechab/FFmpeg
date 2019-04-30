@@ -931,7 +931,7 @@ static double *gen_poly(int len, int size, int (*f)(int,int,double*), int n, dou
     int last = -1;
     int c = 0;
     double s6 = sqrt(3)/2;
-    for(j=0;j<len;j++) {
+    for(j=0;c<len;j++) {
         if(mode == 0) {
             int rnd = f(j,n,pm)%8;
             switch(rnd) {
@@ -1001,7 +1001,7 @@ static double *gen_poly(int len, int size, int (*f)(int,int,double*), int n, dou
         }
     }
     p[k] = p[k-2]; p[k+1] = p[k-1];
-    p[0] = c+1;
+    p[0] = len;
     return p;
 }
 
@@ -1041,7 +1041,7 @@ static int gp_ulam(int k, int n, double *p) {
 
 static void interpolate_poly(double *p1, double *p2, double t) {
     t = (sin(t*M_PI-M_PI/2)+1)/2;
-    for(int k=3; k<p1[0]*2; k+=2) {
+    for(int k=3; k<(p1[0]*2+2); k+=2) {
         p1[k] += t*(p2[k]-p1[k]);
         p1[k+1] += t*(p2[k+1]-p1[k+1]);
     }
@@ -1065,6 +1065,7 @@ static void genutil_rndpoly(GenutilFuncParams *params, int n, int (*f)(int,int,d
     }
     double *ps = params->p;
     params->p = p1;
+    params->length = poly_length(p1);
     colored_curve(params,av_genutil_poly_s,in);
     params->p = ps;
     free(p1);
@@ -1142,6 +1143,7 @@ static void genutil_rndpoly_d(GenutilFuncParams *params, int n, double (*f)(int,
     }
     double *ps = params->p;
     params->p = p1;
+    params->length = poly_length(p1);
     colored_curve(params,av_genutil_poly_s,in);
     params->p = ps;
     free(p1);
