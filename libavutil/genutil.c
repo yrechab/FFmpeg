@@ -1063,10 +1063,15 @@ static void genutil_rndpoly(GenutilFuncParams *params, int n, int (*f)(int,int,d
         interpolate_poly(p1,p2,(double)(nn-pause)/(double)interval);
         free(p2);
     }
+    int spline = params->spline;
     double *ps = params->p;
     params->p = p1;
     params->length = poly_length(p1);
-    colored_curve(params,av_genutil_poly_s,in);
+    if(spline) {
+      colored_spline(params,in);
+    } else {
+      colored_curve(params,av_genutil_poly_s,in);
+    }
     params->p = ps;
     free(p1);
 }
@@ -1142,9 +1147,14 @@ static void genutil_rndpoly_d(GenutilFuncParams *params, int n, double (*f)(int,
         free(p2);
     }
     double *ps = params->p;
+    int spline = params->spline;
     params->p = p1;
     params->length = poly_length(p1);
-    colored_curve(params,av_genutil_poly_s,in);
+    if(spline) {
+      colored_spline(params,in);
+    } else {
+      colored_curve(params,av_genutil_poly_s,in);
+    }
     params->p = ps;
     free(p1);
 }

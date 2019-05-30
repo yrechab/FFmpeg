@@ -63,6 +63,7 @@ typedef struct PlotCurveContext {
     double delta;
     double start;
     double length;
+    int spline;
     int mode;
     int count;
     int form;
@@ -225,6 +226,7 @@ static const AVOption plotcurve_options[] = {
     { "mode","mode",OFFSET(mode), AV_OPT_TYPE_INT,    {.i64=0},    0,        100,        FLAGS },
     { "cmod","cmod",OFFSET(cmod), AV_OPT_TYPE_INT,    {.i64=0},    0,        2,        FLAGS },
     { "rgb","rgb",OFFSET(is_rgb), AV_OPT_TYPE_INT,    {.i64=0},    0,        1,        FLAGS },
+    { "spline","spline",OFFSET(spline), AV_OPT_TYPE_INT,    {.i64=0},    0,        1,        FLAGS },
     { "dbg","dbg",OFFSET(dbg), AV_OPT_TYPE_INT,    {.i64=0},    0,        1,        FLAGS },
     { "ofs","ofs",OFFSET(offset), AV_OPT_TYPE_INT,    {.i64=0},    0,     INT_MAX,        FLAGS },
 
@@ -432,6 +434,7 @@ static void make_params(PlotCurveContext *plotcurve, GenutilFuncParams *params, 
     params->delta = plotcurve->delta;
     params->start = plotcurve->start;
     params->length = plotcurve->length;
+    params->spline = plotcurve->spline;
     params->w = plotcurve->w;
     params->h = plotcurve->h;
     params->is_rgb = plotcurve->is_rgb;

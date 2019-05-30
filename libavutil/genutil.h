@@ -49,6 +49,7 @@ typedef struct GenutilFuncParams {
     double delta;
     double start;
     double length;
+    int spline;
     // frame
     int w,h;
     int alpha;
