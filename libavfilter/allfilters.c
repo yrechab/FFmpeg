@@ -246,6 +246,7 @@ extern AVFilter ff_vf_hysteresis;
 extern AVFilter ff_vf_idet;
 extern AVFilter ff_vf_il;
 extern AVFilter ff_vf_js;
+extern AVFilter ff_vf_martin;
 extern AVFilter ff_vf_inflate;
 extern AVFilter ff_vf_interlace;
 extern AVFilter ff_vf_interleave;
