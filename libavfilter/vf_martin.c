@@ -22,7 +22,7 @@
 #include "libavutil/intreadwrite.h"
 #include "libavutil/opt.h"
 #include "libavutil/pixdesc.h"
-
+#include "framesync.h"
 #include "avfilter.h"
 #include "formats.h"
 #include "internal.h"
@@ -31,6 +31,7 @@
 typedef struct MartinContext {
     const AVClass *class;
     const AVPixFmtDescriptor *desc;
+    FFFrameSync fs;
     int radius;
     float factor;
     float threshold;
@@ -47,6 +48,7 @@ typedef struct MartinContext {
     int height[4];
 
     AVFrame **frames;
+    AVFrame **index_frames;
 } MartinContext;
 
 static int query_formats(AVFilterContext *ctx)
@@ -78,21 +80,8 @@ static int query_formats(AVFilterContext *ctx)
     return ff_set_common_formats(ctx, formats);
 }
 
-static av_cold int init(AVFilterContext *ctx)
-{
-    MartinContext *s = ctx->priv;
-
-    s->nb_inputs = 256;
-
-    s->frames = av_calloc(s->nb_inputs, sizeof(*s->frames));
-    if (!s->frames)
-        return AVERROR(ENOMEM);
-
-    return 0;
-}
-
 typedef struct ThreadData {
-    AVFrame **in, *out;
+    AVFrame **in, *out, **index;
 } ThreadData;
 
 static int martin_frame(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -100,10 +89,11 @@ static int martin_frame(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     MartinContext *s = ctx->priv;
     ThreadData *td = arg;
     AVFrame **in = td->in;
+    AVFrame **idx = td->index;
     AVFrame *out = td->out;
-    const int nb_inputs = s->nb_inputs;
-    const int depth = s->depth;
-    int i, p, x, y;
+    //const int nb_inputs = s->nb_inputs;
+    //const int depth = s->depth;
+    int x, y;
 
     const int slice_start = (s->height[0] * jobnr) / nb_jobs;
     const int slice_end = (s->height[0] * (jobnr+1)) / nb_jobs;
@@ -112,7 +102,9 @@ static int martin_frame(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     uint8_t *dst2 = out->data[2] + slice_start * out->linesize[2];
     for (y = slice_start; y < slice_end; y++) {
       for (x = 0; x < s->linesize[0]; x++) {
-	 uint8_t index = in[0]->data[0][y * in[0]->linesize[0] + x];
+	 uint8_t i = idx[0]->data[0][y * idx[0]->linesize[0] + x];
+	 float p = (float)i/256.0;
+	 uint8_t index = p*s->nb_frames;
          dst0[x] = in[index]->data[0][y * in[index]->linesize[0] + x];
          dst1[x] = in[index]->data[1][y * in[index]->linesize[1] + x];
          dst2[x] = in[index]->data[2][y * in[index]->linesize[2] + x];
@@ -121,100 +113,12 @@ static int martin_frame(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
       dst1 += out->linesize[1];
       dst2 += out->linesize[2];
     }
-/****
-    if (s->depth <= 8) {
-        for (p = 0; p < s->nb_planes; p++) {
-            const int slice_start = (s->height[p] * jobnr) / nb_jobs;
-            const int slice_end = (s->height[p] * (jobnr+1)) / nb_jobs;
-            uint8_t *dst = out->data[p] + slice_start * out->linesize[p];
-
-            if (!((1 << p) & s->planes)) {
-                av_image_copy_plane(dst, out->linesize[p],
-                                    in[radius]->data[p] + slice_start * in[radius]->linesize[p],
-                                    in[radius]->linesize[p],
-                                    s->linesize[p], slice_end - slice_start);
-                continue;
-            }
-
-            for (y = slice_start; y < slice_end; y++) {
-                for (x = 0; x < s->linesize[p]; x++) {
-                    int src = in[radius]->data[p][y * in[radius]->linesize[p] + x];
-                    float diff, avg;
-                    int sum = 0;
-
-                    for (i = 0; i < nb_inputs; i++) {
-                        sum += in[i]->data[p][y * in[i]->linesize[p] + x];
-                    }
-
-                    avg = sum / (float)nb_inputs;
-                    diff = src - avg;
-                    if (fabsf(diff) < threshold) {
-                        int amp;
-                        if (diff < 0) {
-                            amp = -FFMIN(FFABS(diff * factor), llimit);
-                        } else {
-                            amp = FFMIN(FFABS(diff * factor), hlimit);
-                        }
-                        dst[x] = av_clip_uint8(src + amp);
-                    } else {
-                        dst[x] = src;
-                    }
-                }
-
-                dst += out->linesize[p];
-            }
-        }
-    } else {
-        for (p = 0; p < s->nb_planes; p++) {
-            const int slice_start = (s->height[p] * jobnr) / nb_jobs;
-            const int slice_end = (s->height[p] * (jobnr+1)) / nb_jobs;
-            uint16_t *dst = (uint16_t *)(out->data[p] + slice_start * out->linesize[p]);
-
-            if (!((1 << p) & s->planes)) {
-                av_image_copy_plane((uint8_t *)dst, out->linesize[p],
-                                    in[radius]->data[p] + slice_start * in[radius]->linesize[p],
-                                    in[radius]->linesize[p],
-                                    s->linesize[p], slice_end - slice_start);
-                continue;
-            }
-
-            for (y = slice_start; y < slice_end; y++) {
-                for (x = 0; x < s->linesize[p] / 2; x++) {
-                    int src = AV_RN16(in[radius]->data[p] + y * in[radius]->linesize[p] + x * 2);
-                    float diff, avg;
-                    int sum = 0;
-
-                    for (i = 0; i < nb_inputs; i++) {
-                        sum += AV_RN16(in[i]->data[p] + y * in[i]->linesize[p] + x * 2);
-                    }
-
-                    avg = sum / (float)nb_inputs;
-                    diff = src - avg;
-
-                    if (fabsf(diff) < threshold) {
-                        int amp;
-                        if (diff < 0) {
-                            amp = -FFMIN(FFABS(diff * factor), llimit);
-                        } else {
-                            amp = FFMIN(FFABS(diff * factor), hlimit);
-                        }
-                        dst[x] = av_clip_uintp2_c(src + amp, depth);
-                    } else {
-                        dst[x] = src;
-                    }
-                }
-
-                dst += out->linesize[p] / 2;
-            }
-        }
-    }
-***/
-
     return 0;
 }
 static int config_output(AVFilterLink *outlink)
 {
     AVFilterContext *ctx = outlink->src;
+    av_log(ctx, AV_LOG_DEBUG, "#################### config_output\n");
     MartinContext *s = ctx->priv;
     AVFilterLink *inlink = ctx->inputs[0];
     int ret;
@@ -230,7 +134,9 @@ static int config_output(AVFilterLink *outlink)
 
     s->height[1] = s->height[2] = AV_CEIL_RSHIFT(inlink->h, s->desc->log2_chroma_h);
     s->height[0] = s->height[3] = inlink->h;
-
+    if ((ret = ff_framesync_init_dualinput(&s->fs, ctx)) < 0)
+            return ret;
+    ff_framesync_configure(&s->fs);
     return 0;
 }
 
@@ -238,49 +144,92 @@ static av_cold void uninit(AVFilterContext *ctx)
 {
     MartinContext *s = ctx->priv;
     int i;
-
+    ff_framesync_uninit(&s->fs);
     if (s->frames) {
-        for (i = 0; i < s->nb_frames; i++)
+        for (i = 0; i < s->nb_frames; i++) {
            av_frame_free(&s->frames[i]);
+           av_frame_free(&s->index_frames[i]);
+	}
     }
     av_freep(&s->frames);
+    av_freep(&s->index_frames);
 }
 
-static int filter_frame(AVFilterLink *inlink, AVFrame *in)
+static AVFrame *martin_filter_frame(AVFilterContext *ctx, AVFrame *in, AVFrame *index)
 {
-    AVFilterContext *ctx = inlink->dst;
+    av_log(ctx, AV_LOG_DEBUG, "#################### filterframe\n");
     AVFilterLink *outlink = ctx->outputs[0];
     MartinContext *s = ctx->priv;
     ThreadData td;
     AVFrame *out;
-
     if (s->nb_frames < s->nb_inputs) {
-        s->frames[s->nb_frames] = in;
+        s->frames[s->nb_frames] = av_frame_clone(in);
+        s->index_frames[s->nb_frames] = av_frame_clone(index);
         s->nb_frames++;
-        return 0;
+    	av_log(ctx, AV_LOG_DEBUG, "#################### storing %d\n",s->nb_frames);
+        //return NULL;
     } else {
+    	av_log(ctx, AV_LOG_DEBUG, "#################### rotate 1\n");
         av_frame_free(&s->frames[0]);
+        av_frame_free(&s->index_frames[0]);
         memmove(&s->frames[0], &s->frames[1], sizeof(*s->frames) * (s->nb_inputs - 1));
-        s->frames[s->nb_inputs - 1] = in;
+        memmove(&s->index_frames[0], &s->index_frames[1], sizeof(*s->index_frames) * (s->nb_inputs - 1));
+        s->frames[s->nb_inputs - 1] = av_frame_clone(in);
+        s->index_frames[s->nb_inputs - 1] = av_frame_clone(index);
     }
-
+    av_log(ctx, AV_LOG_DEBUG, "#################### get output buffer %d\n",s->nb_frames);
     out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
     if (!out)
-        return AVERROR(ENOMEM);
+        return NULL;
     out->pts = s->frames[0]->pts;
+    //out->pts = in->pts;
 
     td.out = out;
+    td.index = s->index_frames;
     td.in = s->frames;
+    av_log(ctx, AV_LOG_DEBUG, "#################### calling internal execute\n");
     ctx->internal->execute(ctx, martin_frame, &td, NULL, FFMIN(s->height[1], ff_filter_get_nb_threads(ctx)));
-
-    return ff_filter_frame(outlink, out);
+    av_frame_free(&in);
+    av_log(ctx, AV_LOG_DEBUG, "#################### returning out\n");
+    return out;
 }
+static int filter_frame_for_dualinput(FFFrameSync *fs)
+{   
+    AVFilterContext *ctx = fs->parent;
+    av_log(ctx, AV_LOG_DEBUG, "#################### dualinput\n");
+    AVFrame *default_buf, *index_buf, *dst_buf;
+    int ret;
+    
+    ret = ff_framesync_dualinput_get(fs, &default_buf, &index_buf);
+    if (ret < 0)
+        return ret;
+    if (!index_buf)
+        return ff_filter_frame(ctx->outputs[0], default_buf);
+    dst_buf = martin_filter_frame(ctx, default_buf, index_buf);
+    return ff_filter_frame(ctx->outputs[0], dst_buf);
+}   
+
+static av_cold int init(AVFilterContext *ctx)
+{
+    av_log(ctx, AV_LOG_INFO, "#################### init\n");
+    MartinContext *s = ctx->priv;
+
+    //s->nb_inputs = 256;
+
+    s->frames = av_calloc(s->nb_inputs, sizeof(*s->frames));
+    s->index_frames = av_calloc(s->nb_inputs, sizeof(*s->index_frames));
+    if (!s->frames || !s->index_frames)
+        return AVERROR(ENOMEM);
+    s->fs.on_event = filter_frame_for_dualinput;
+    return 0;
+}
+
 
 #define OFFSET(x) offsetof(MartinContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_FILTERING_PARAM
 
 static const AVOption martin_options[] = {
-    { "radius", "set radius", OFFSET(radius), AV_OPT_TYPE_INT, {.i64=2}, 1, 63, .flags = FLAGS },
+    { "frames", "set radius", OFFSET(nb_inputs), AV_OPT_TYPE_INT, {.i64=256}, 1, 256, .flags = FLAGS },
     { "factor", "set factor", OFFSET(factor), AV_OPT_TYPE_FLOAT, {.dbl=2}, 0, UINT16_MAX, .flags = FLAGS },
     { "threshold", "set threshold", OFFSET(threshold), AV_OPT_TYPE_FLOAT, {.dbl=10}, 0, UINT16_MAX, .flags = FLAGS },
     { "low", "set low limit for amplification", OFFSET(llimit), AV_OPT_TYPE_INT, {.i64=UINT16_MAX}, 0, UINT16_MAX, .flags = FLAGS },
@@ -289,13 +238,22 @@ static const AVOption martin_options[] = {
     { NULL },
 };
 
+static int activate(AVFilterContext *ctx) {
+    MartinContext *s = ctx->priv;
+    av_log(ctx, AV_LOG_DEBUG, "#################### activate\n");
+    return ff_framesync_activate(&s->fs);
+}
+
 static const AVFilterPad inputs[] = {
     {
         .name          = "default",
         .type          = AVMEDIA_TYPE_VIDEO,
-        .filter_frame  = filter_frame,
     },
-    { NULL }
+    {
+        .name          = "index",
+        .type          = AVMEDIA_TYPE_VIDEO,
+    },
+   { NULL }
 };
 
 static const AVFilterPad outputs[] = {
@@ -307,17 +265,19 @@ static const AVFilterPad outputs[] = {
     { NULL }
 };
 
-AVFILTER_DEFINE_CLASS(martin);
+FRAMESYNC_DEFINE_CLASS(martin, MartinContext, fs);
 
 AVFilter ff_vf_martin = {
     .name          = "martin",
     .description   = NULL_IF_CONFIG_SMALL("Martin changes between successive video frames."),
     .priv_size     = sizeof(MartinContext),
     .priv_class    = &martin_class,
+    .preinit       = martin_framesync_preinit,
     .query_formats = query_formats,
+    .activate      = activate,
     .outputs       = outputs,
     .inputs        = inputs,
     .init          = init,
     .uninit        = uninit,
-    .flags         = AVFILTER_FLAG_SLICE_THREADS,
+    .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_INTERNAL | AVFILTER_FLAG_SLICE_THREADS,
 };
