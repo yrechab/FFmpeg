@@ -82,6 +82,7 @@ static int query_formats(AVFilterContext *ctx)
 
 typedef struct ThreadData {
     AVFrame **in, *out, **index;
+    int xoff,yoff;
 } ThreadData;
 
 static int martin_frame(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
@@ -102,9 +103,15 @@ static int martin_frame(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
     uint8_t *dst2 = out->data[2] + slice_start * out->linesize[2];
     for (y = slice_start; y < slice_end; y++) {
       for (x = 0; x < s->linesize[0]; x++) {
-	 uint8_t i = idx[0]->data[0][y * idx[0]->linesize[0] + x];
-	 float p = (float)i/256.0;
-	 uint8_t index = p*s->nb_frames;
+	 int xi = x+td->xoff;
+	 int yi = y+td->yoff;
+	 uint8_t index=0;
+	 if(xi>=0 && xi < idx[0]->width && yi>=0 && yi < idx[0]->height)
+	 {
+	   uint8_t i = idx[0]->data[0][yi * idx[0]->linesize[0] + xi];
+	   float p = (float)i/256.0;
+	   index = p*s->nb_frames;
+	 }
          dst0[x] = in[index]->data[0][y * in[index]->linesize[0] + x];
          dst1[x] = in[index]->data[1][y * in[index]->linesize[1] + x];
          dst2[x] = in[index]->data[2][y * in[index]->linesize[2] + x];
@@ -183,7 +190,8 @@ static AVFrame *martin_filter_frame(AVFilterContext *ctx, AVFrame *in, AVFrame *
         return NULL;
     out->pts = s->frames[0]->pts;
     //out->pts = in->pts;
-
+    td.xoff = (index->width - in->width)/2; 
+    td.yoff = (index->height - in->height)/2; 
     td.out = out;
     td.index = s->index_frames;
     td.in = s->frames;
