@@ -1,5 +1,20 @@
 #include "plot.h"
 
+void av_inc_pix(int x, int y, double a, int min, int w, int h,int linesize, uint8_t *buf) {
+    if(x>=0 && x<w && y>=0 && y<h) {
+        int val = buf[x + linesize * y];
+	if(val == 255) return;
+	if(val + floor(a*255) > 255) {
+	    buf[x + linesize * y] = 255;
+	    return;
+	}
+	if(val < min) {
+	   buf[x + linesize * y] = min;
+	   return;
+	}
+        buf[x + linesize * y] += floor(a*255);
+    }
+}
 static void av_plot_pix(int x, int y, double a, int w, int h,int linesize, uint8_t *buf) {
     if(x>=0 && x<w && y>=0 && y<h) {
         buf[x + linesize * y] = floor(a*255);

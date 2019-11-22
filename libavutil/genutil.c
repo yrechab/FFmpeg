@@ -510,10 +510,10 @@ static void drawPoint(GenutilFuncParams *params, AVFrame *in, int plane, double 
     av_plot_form(params->form,x,y,a,params->w,params->h,in->linesize[plane],in->data[plane]);
 }
 
-static void plot_point(GenutilFuncParams *params, AVFrame *in, int plane, double complex _z, double a) {
+static void plot_point(GenutilFuncParams *params, AVFrame *in, int plane, long double complex _z, double a) {
     double complex z = av_genutil_rotate(_z,params->rot);
-    int x = floor(params->fx*creal(z) + params->w/2) + params->x;
-    int y = floor(params->fy*cimag(z) + params->h/2) + params->y;
+    int x = floor(params->fx*creall(_z) + params->w/2) + params->x;
+    int y = floor(params->fy*cimagl(_z) + params->h/2) + params->y;
     av_plot_form(params->form,x,y,a,params->w,params->h,in->linesize[plane],in->data[plane]);
 }
 
@@ -1604,32 +1604,61 @@ static void genutil_frac(GenutilFuncParams *params, int n, AVFrame *in) {
 
 
 // ================= other maps (mira hopalong ... ) =================/
-static void genutil_attr(GenutilFuncParams *params, AVFrame *in, double complex (*f)(double complex, double*)) {
-    double *p = params->p;
-    int len = floor(p[0]);
-    double complex start = p[1] + I * p[2];
-    int k;
-    double complex z = start;
-    double complex z1;
-    double colors[3];
-    for(k=0;k<len;k++) {
-        av_genutil_get_color(params->cfunc, params->cp,k*0.001,params->cmod, params->is_rgb, colors);
-        z1 = f(z,&p[3]);
-        plot_point(params,in,0,creal(z1) - I * cimag(z1),colors[0]);
-        plot_point(params,in,1,creal(z1) - I * cimag(z1),colors[1]);
-        plot_point(params,in,2,creal(z1) - I * cimag(z1),colors[2]);
-        z = z1;
+//
+
+static void inc_pix(int x, int y, int w, int h,int *buf, int *max) {
+    if(x>=0 && x<w && y>=0 && y<h) {
+        buf[x + w * y]++;
+	if(buf[x + w * y]>*max) *max = buf[x + w * y];
     }
 }
-static double miraf(double x, double a) {
+static void inc_point(GenutilFuncParams *params, long double complex _z, int *buf, int*max) {
+    double complex z = av_genutil_rotate(_z,params->rot);
+    int x = floor(params->fx*creall(_z) + params->w/2) + params->x;
+    int y = floor(params->fy*cimagl(_z) + params->h/2) + params->y;
+    inc_pix(x,y,params->w,params->h,buf,max);
+}
+
+
+static void genutil_attr(GenutilFuncParams *params, AVFrame *in, long double complex (*f)(long double complex, double*)) {
+    int *buf = calloc(params->w*params->h,sizeof(int));
+    int max = 0;
+    double *p = params->p;
+    int len = floor(p[0]);
+    long double complex start = p[1] + I * p[2];
+    int k;
+    long double complex z = start;
+    long double complex z1;
+    double colors[3];
+    for(k=0;k<len;k++) {
+        z1 = f(z,&p[5]);
+        inc_point(params,creall(z1) - I * cimagl(z1),buf, &max);
+        z = z1;
+    }
+    av_log(params->ctx, AV_LOG_INFO, "max: %d\n", max);
+    int x,y;
+    for(x=0;x<params->w;x++) {
+        for(y=0;y<params->h;y++) {
+	    int val = buf[x + params->w*y];
+	    if(val>0) {
+            av_genutil_get_color(params->cfunc, params->cp,val*p[3]+p[4],params->cmod, params->is_rgb, colors);
+            av_plot_form(params->form,x,y,colors[0],params->w,params->h,in->linesize[0],in->data[0]);
+            av_plot_form(params->form,x,y,colors[1],params->w,params->h,in->linesize[1],in->data[1]);
+            av_plot_form(params->form,x,y,colors[2],params->w,params->h,in->linesize[2],in->data[2]);		 }
+
+	}
+    }
+    free(buf);
+}
+static double miraf(long double x, double a) {
     return a*x-(1-a)*(2*x*x/(1+x*x));
 }
 
-static double complex mira(double complex z, double *p) {
+static long double complex mira(long double complex z, double *p) {
     double a = p[0];
     double b = p[1];
-    double x = b * cimag(z) + miraf(creal(z),a);
-    double y = -creal(z) + miraf(x,a);
+    long double x = b * cimagl(z) + miraf(creall(z),a);
+    long double y = -creall(z) + miraf(x,a);
     return x + I * y;
 }
 
@@ -1637,11 +1666,11 @@ static void genutil_mira(GenutilFuncParams *params, int n, AVFrame *in) {
     genutil_attr(params,in,mira);
 }
 
-static double complex kaneko1(double complex z, double *p) {
+static long double complex kaneko1(long double complex z, double *p) {
     double a = p[0];
     double b = p[1];
-    double x = a * creal(z) + (1-a)*(1-b*cimag(z)*cimag(z));
-    double y = creal(z);
+    long double x = a * creall(z) + (1-a)*(1-b*cimagl(z)*cimagl(z));
+    long double y = creall(z);
     return x + I * y;
 }
 
@@ -1649,11 +1678,11 @@ static void genutil_kaneko1(GenutilFuncParams *params, int n, AVFrame *in) {
     genutil_attr(params,in,kaneko1);
 }
 
-static double complex kaneko2(double complex z, double *p) {
+static long double complex kaneko2(long double complex z, double *p) {
     double a = p[0];
     double b = p[1];
-    double x = a * creal(z) + (1-a)*(1-b*fabs(cimag(z)));
-    double y = creal(z);
+    long double x = a * creall(z) + (1-a)*(1-b*fabsl(cimagl(z)));
+    long double y = creall(z);
     return x + I * y;
 }
 
@@ -1661,9 +1690,9 @@ static void genutil_kaneko2(GenutilFuncParams *params, int n, AVFrame *in) {
     genutil_attr(params,in,kaneko2);
 }
 
-static double complex gingerbreadman(double complex z, double *p) {
-    double x = 1 - cimag(z) + fabs(creal(z));
-    double y = creal(z);
+static long double complex gingerbreadman(long double complex z, double *p) {
+    long double x = 1 - cimagl(z) + fabs(creall(z));
+    long double y = creall(z);
     return x + I * y;
 }
 
@@ -1671,19 +1700,33 @@ static void genutil_ginger(GenutilFuncParams *params, int n, AVFrame *in) {
     genutil_attr(params,in,gingerbreadman);
 }
 
-static double complex hopalong(double complex z, double *p) {
-    double a = p[0];
-    double b = p[1];
-    double c = p[2];
-    double x0 = creal(z);
-    double y0 = cimag(z);
-    double x =  y0 - SIGN(x0)*sqrt(fabs(b*x0-c));
-    double y = a - x0;
+static long double complex hopalong(long double complex z, double *p) {
+    long double a = p[0];
+    long double b = p[1];
+    long double c = p[2];
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    long double x =  y0 - SIGN(x0)*sqrt(fabsl(b*x0-c));
+    long double y = a - x0;
     return x + I * y;
 }
- 
+
+static long double complex bedhead(long double complex z, double *p) {
+    long double a = p[0];
+    long double b = p[1];
+    long double x0 = creall(z);
+    long double y0 = cimagl(z);
+    long double x = sinl(x0*y0/b)*y0+cosl(a*x0-y0);
+    long double y = x0+sinl(y0)/b;
+    return x + I * y;
+}
+
 static void genutil_hopa(GenutilFuncParams *params, int n, AVFrame *in) {
     genutil_attr(params,in,hopalong);
+}
+
+static void genutil_bedhead(GenutilFuncParams *params, int n, AVFrame *in) {
+    genutil_attr(params,in,bedhead);
 }
 
 static double complex gexp(double complex z, double *p) {
@@ -2004,6 +2047,7 @@ static GenutilFunc gfuncs[] = {
     {"kaneko2",genutil_kaneko2},
     {"ginger",genutil_ginger},
     {"hopa",genutil_hopa},
+    {"bedhead",genutil_bedhead},
     {"exp",genutil_exp},
     {"hilbert",genutil_hilbert},
     {"lm",genutil_lindenmeyer_pal},
@@ -2273,6 +2317,9 @@ static double cconstant(double t, double *p) {
     return p[0];
 }
 
+static double clin(double t, double *p) {
+    return p[0] + p[1]*t;
+}
 static double cpchain(double t, double *p) {
     int len = p[0];
     int section = t/len + 1;
@@ -2288,6 +2335,7 @@ double czero(double t, double *p) {
 static CFunc cfuncs[] = {
     {"sin",cfsin},
     {"cos",cfcos},
+    {"lin",clin},
     {"constant",cconstant},
     {"pchain",cpchain},
     {NULL,NULL}

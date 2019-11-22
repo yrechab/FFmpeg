@@ -220,6 +220,8 @@ extern AVFilter ff_vf_floodfill;
 extern AVFilter ff_vf_format;
 extern AVFilter ff_vf_fps;
 extern AVFilter ff_vf_frac;
+extern AVFilter ff_vf_fracd;
+extern AVFilter ff_vf_fracld;
 extern AVFilter ff_vf_framepack;
 extern AVFilter ff_vf_framerate;
 extern AVFilter ff_vf_framestep;

@@ -35,9 +35,9 @@
 #include "libavutil/plot.h"
 #include "internal.h"
 #include <complex.h>
-//#define PRECLD
+#define PRECLD
 //#define PRECD
-#define PREC128
+//#define PREC128
 #ifdef PRECLD
 #define MYFLT long double
 #define MYCOMPLEX long double complex
@@ -132,7 +132,7 @@
 #endif
 
 
-typedef struct FracFuncParams {
+typedef struct FracLDFuncParams {
     MYFLT x;
     MYFLT y;
     double w;
@@ -150,12 +150,12 @@ typedef struct FracFuncParams {
     double cp[3][10];
     int cmod;
     int is_rgb;
-} FracFuncParams;
+} FracLDFuncParams;
 
-typedef struct FracContext {
+typedef struct FracLDContext {
     const AVClass *class;
     const char *f;
-    void (*ffunc)(FracFuncParams *, AVFrame*,int,int,int);
+    void (*ffunc)(FracLDFuncParams *, AVFrame*,int,int,int);
     double p[40];
     const char *ifc;
     MYCOMPLEX (*ifunc)(MYCOMPLEX,MYFLT*);
@@ -190,13 +190,13 @@ typedef struct FracContext {
     int dbg;
     char *rf[20];
 
-} FracContext;
+} FracLDContext;
 
 
-#define OFFSET(x) offsetof(FracContext, x)
+#define OFFSET(x) offsetof(FracLDContext, x)
 #define FLAGS AV_OPT_FLAG_VIDEO_PARAM|AV_OPT_FLAG_FILTERING_PARAM
 
-static const AVOption frac_options[] = {
+static const AVOption fracld_options[] = {
     { "f",  "f",   OFFSET(f),  AV_OPT_TYPE_STRING, {.str=NULL}, CHAR_MIN, CHAR_MAX, FLAGS },
     //{ "x","x",       OFFSET(x),     AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
     //{ "y","y",       OFFSET(y),     AV_OPT_TYPE_DOUBLE, {.dbl =  0}, -DBL_MAX,  DBL_MAX,  FLAGS },
@@ -254,7 +254,7 @@ static const AVOption frac_options[] = {
     {NULL},
 };
 
-AVFILTER_DEFINE_CLASS(frac);
+AVFILTER_DEFINE_CLASS(fracld);
 
 
 static MYCOMPLEX rotate(MYCOMPLEX z, MYFLT phi) {
@@ -1114,13 +1114,13 @@ static double (*fhsv[3])(double phi, double S, double V) = { fhsv_g, fhsv_b, fhs
 
 typedef struct Func {
     const char *name;
-    void (*f)(FracFuncParams *params, AVFrame *in, int x, int y, int n);
+    void (*f)(FracLDFuncParams *params, AVFrame *in, int x, int y, int n);
 } Func;
 
-static void zero(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+static void zero(FracLDFuncParams *params, AVFrame *in, int x, int y, int n) {
 }
 
-static void sq(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+static void sq(FracLDFuncParams *params, AVFrame *in, int x, int y, int n) {
     int plane,x0,y0;
     uint8_t *ptr;
     x0 = x-params->w/2;
@@ -1131,7 +1131,7 @@ static void sq(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     }
 }
 
-static void sqs(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+static void sqs(FracLDFuncParams *params, AVFrame *in, int x, int y, int n) {
     int plane,x0,y0;
     uint8_t *ptr;
 
@@ -1143,7 +1143,7 @@ static void sqs(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     }
 }
 
-static void c(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+static void c(FracLDFuncParams *params, AVFrame *in, int x, int y, int n) {
     double xi0,yi0;
     MYCOMPLEX z,_z;
     MYFLT x0,y0;
@@ -1165,7 +1165,7 @@ static void c(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     }
 }
 
-static void cf(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+static void cf(FracLDFuncParams *params, AVFrame *in, int x, int y, int n) {
     double xi0,yi0;
     MYCOMPLEX z,_z;
     MYFLT x0,y0;
@@ -1187,7 +1187,7 @@ static void cf(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     }
 }
 
-static void cs(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+static void cs(FracLDFuncParams *params, AVFrame *in, int x, int y, int n) {
     double xi0,yi0;
     MYCOMPLEX z,_z;
     MYFLT x0,y0;
@@ -1210,7 +1210,7 @@ static void cs(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
 }
 
 
-static void j(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+static void j(FracLDFuncParams *params, AVFrame *in, int x, int y, int n) {
     int plane,len,k;
     double colors[3];
     MYCOMPLEX z;
@@ -1231,7 +1231,7 @@ static void j(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     }
 }
 
-static void m(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+static void m(FracLDFuncParams *params, AVFrame *in, int x, int y, int n) {
     int plane,len,k;
     MYFLT xr0,yr0;
     MYCOMPLEX zr,z; 
@@ -1271,7 +1271,7 @@ static void m(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     }
 }
 
-static void hopa(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+static void hopa(FracLDFuncParams *params, AVFrame *in, int x, int y, int n) {
     int plane,len,k;
     MYCOMPLEX z;
     double max;
@@ -1307,9 +1307,9 @@ static void hopa(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
     }
 }
 
-static void hopa1(FracFuncParams *params, AVFrame *in, int x, int y, int n) {
+static void hopa1(FracLDFuncParams *params, AVFrame *in, int x, int y, int n) {
     int plane,k,len;
-    double max;
+    double max=0;
     MYFLT y00,x0,y0;
     MYCOMPLEX zr,z; 
     double colors[3];
@@ -1366,7 +1366,7 @@ static Func funcs[] = {
     { NULL, NULL }
 };
 
-static void (*get_func(const char *name))(FracFuncParams*,AVFrame*,int,int,int) {
+static void (*get_func(const char *name))(FracLDFuncParams*,AVFrame*,int,int,int) {
     int k=0;
     while(funcs[k].name) {
         if(!strcmp(name, funcs[k].name)) {
@@ -1377,7 +1377,7 @@ static void (*get_func(const char *name))(FracFuncParams*,AVFrame*,int,int,int) 
     return NULL;
 }
 
-static void parse_ffunc(const char *ff, double *p, void (**f)(FracFuncParams*,AVFrame*,int,int,int)) {
+static void parse_ffunc(const char *ff, double *p, void (**f)(FracLDFuncParams*,AVFrame*,int,int,int)) {
     char *saveptr,*token;
     char *str = strdup(ff);
     int j;
@@ -1411,62 +1411,62 @@ static av_cold void logParametersL(AVFilterContext *ctx,MYFLT* p, int len) {
     av_log(ctx, AV_LOG_INFO,"\n"); 
 }
 
-static av_cold int frac_init(AVFilterContext *ctx)
+static av_cold int fracld_init(AVFilterContext *ctx)
 {
     int k;
-    FracContext *frac = ctx->priv;
-    av_log(ctx, AV_LOG_INFO, "x=%s y=%s fx=%s fy=%s\n",frac->str_x, frac->str_y, frac->str_fx, frac->str_fy);
-    frac->fx = MYSTRTOF(frac->str_fx);
-    frac->fy = MYSTRTOF(frac->str_fy);
-    frac->x = MYSTRTOF(frac->str_x);
-    frac->y = MYSTRTOF(frac->str_y);
-    av_log(ctx, AV_LOG_INFO, "rgb=%d ofs=%d x=%Lf y=%Lf fx=%Lf fy=%Lf\n",frac->is_rgb, frac->offset, frac->x, frac->y, frac->fx, frac->fy);
+    FracLDContext *fracld = ctx->priv;
+    av_log(ctx, AV_LOG_INFO, "x=%s y=%s fx=%s fy=%s\n",fracld->str_x, fracld->str_y, fracld->str_fx, fracld->str_fy);
+    fracld->fx = MYSTRTOF(fracld->str_fx);
+    fracld->fy = MYSTRTOF(fracld->str_fy);
+    fracld->x = MYSTRTOF(fracld->str_x);
+    fracld->y = MYSTRTOF(fracld->str_y);
+    av_log(ctx, AV_LOG_INFO, "rgb=%d ofs=%d x=%Lf y=%Lf fx=%Lf fy=%Lf\n",fracld->is_rgb, fracld->offset, fracld->x, fracld->y, fracld->fx, fracld->fy);
 
     for(k=0;k<10;k++) {
-        if(frac->nf[k]) {
-            parse_nfunc(frac->nf[k],frac->np[k],&frac->nfunc[k]); 
-            if(!frac->nfunc[k]) {
-                av_log(ctx, AV_LOG_WARNING, "function for nf%d not found %s\n", k, frac->nf[k]);
+        if(fracld->nf[k]) {
+            parse_nfunc(fracld->nf[k],fracld->np[k],&fracld->nfunc[k]); 
+            if(!fracld->nfunc[k]) {
+                av_log(ctx, AV_LOG_WARNING, "function for nf%d not found %s\n", k, fracld->nf[k]);
             } else {
-                av_log(ctx, AV_LOG_INFO, "function for nf%d is [%s]", k, frac->nf[k]);
-                logParametersL(ctx,frac->np[k],10);
+                av_log(ctx, AV_LOG_INFO, "function for nf%d is [%s]", k, fracld->nf[k]);
+                logParametersL(ctx,fracld->np[k],10);
             }
         }
     }
-    if(frac->f) {
-        parse_ffunc(frac->f,frac->p,&frac->ffunc); 
-        if(!frac->ffunc) {
-            av_log(ctx, AV_LOG_WARNING, "function for ff not found %s\n", frac->f);
+    if(fracld->f) {
+        parse_ffunc(fracld->f,fracld->p,&fracld->ffunc); 
+        if(!fracld->ffunc) {
+            av_log(ctx, AV_LOG_WARNING, "function for ff not found %s\n", fracld->f);
         } else {
-            av_log(ctx, AV_LOG_INFO, "function for ff is [%s]", frac->f);
-            logParameters(ctx,frac->p,40);
+            av_log(ctx, AV_LOG_INFO, "function for ff is [%s]", fracld->f);
+            logParameters(ctx,fracld->p,40);
         }
     } 
-    if(!frac->ffunc) {
-        frac->ffunc = zero;
+    if(!fracld->ffunc) {
+        fracld->ffunc = zero;
     }
 
-    if(frac->ifc) {
-        parse_ifunc(frac->ifc,frac->ip,&frac->ifunc); 
-        if(!frac->ifunc) {
-            av_log(ctx, AV_LOG_WARNING, "function for if not found %s\n", frac->ifc);
+    if(fracld->ifc) {
+        parse_ifunc(fracld->ifc,fracld->ip,&fracld->ifunc); 
+        if(!fracld->ifunc) {
+            av_log(ctx, AV_LOG_WARNING, "function for if not found %s\n", fracld->ifc);
         } else {
-            av_log(ctx, AV_LOG_INFO, "function for if is [%s]", frac->ifc);
-            logParametersL(ctx,frac->ip,40);
+            av_log(ctx, AV_LOG_INFO, "function for if is [%s]", fracld->ifc);
+            logParametersL(ctx,fracld->ip,40);
         }
     } 
-    if(!frac->ifunc) {
-        frac->ifunc = izero;
+    if(!fracld->ifunc) {
+        fracld->ifunc = izero;
     }
 
     for(k=0;k<3;k++) {
-        if(frac->cf[k]) {
-            av_genutil_parse_cfunc(frac->cf[k],frac->cp[k],&frac->cfunc[k]); 
-            if(!frac->cfunc[k]) {
-                av_log(ctx, AV_LOG_WARNING, "function for cf%d not found %s\n", k, frac->cf[k]);
+        if(fracld->cf[k]) {
+            av_genutil_parse_cfunc(fracld->cf[k],fracld->cp[k],&fracld->cfunc[k]); 
+            if(!fracld->cfunc[k]) {
+                av_log(ctx, AV_LOG_WARNING, "function for cf%d not found %s\n", k, fracld->cf[k]);
             } else {
-                av_log(ctx, AV_LOG_INFO, "function for cf%d is [%s]", k, frac->cf[k]);
-                logParameters(ctx,frac->cp[k],10);
+                av_log(ctx, AV_LOG_INFO, "function for cf%d is [%s]", k, fracld->cf[k]);
+                logParameters(ctx,fracld->cp[k],10);
             }
         } 
      }
@@ -1474,9 +1474,9 @@ static av_cold int frac_init(AVFilterContext *ctx)
     return 0;
 }
 
-static int frac_query_formats(AVFilterContext *ctx)
+static int fracld_query_formats(AVFilterContext *ctx)
 {
-    FracContext *frac = ctx->priv;
+    FracLDContext *fracld = ctx->priv;
     static const enum AVPixelFormat yuv_pix_fmts[] = {
         AV_PIX_FMT_YUV444P,  AV_PIX_FMT_YUV422P,  AV_PIX_FMT_YUV420P,
         AV_PIX_FMT_YUV411P,  AV_PIX_FMT_YUV410P,  AV_PIX_FMT_YUV440P,
@@ -1507,7 +1507,7 @@ static int frac_query_formats(AVFilterContext *ctx)
     };
     AVFilterFormats *fmts_list;
 
-    if (frac->is_rgb) {
+    if (fracld->is_rgb) {
         fmts_list = ff_make_format_list(rgb_pix_fmts);
     } else
         fmts_list = ff_make_format_list(yuv_pix_fmts);
@@ -1516,30 +1516,30 @@ static int frac_query_formats(AVFilterContext *ctx)
     return ff_set_common_formats(ctx, fmts_list);
 }
 
-static int frac_config_props(AVFilterLink *inlink)
+static int fracld_config_props(AVFilterLink *inlink)
 {
-    FracContext *frac = inlink->dst->priv;
+    FracLDContext *fracld = inlink->dst->priv;
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
 
     av_assert0(desc);
-    frac->w = inlink->w;
-    frac->h = inlink->h;
-    frac->hsub = desc->log2_chroma_w;
-    frac->vsub = desc->log2_chroma_h;
-    frac->bps = desc->comp[0].depth;
-    frac->planes = desc->nb_components;
+    fracld->w = inlink->w;
+    fracld->h = inlink->h;
+    fracld->hsub = desc->log2_chroma_w;
+    fracld->vsub = desc->log2_chroma_h;
+    fracld->bps = desc->comp[0].depth;
+    fracld->planes = desc->nb_components;
     return 0;
 }
 
 typedef struct ThreadData {
     int n;
     AVFrame *in;
-    FracFuncParams *params;
+    FracLDFuncParams *params;
 } ThreadData;
 
-static int slice_frac_filter(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
+static int slice_fracld_filter(AVFilterContext *ctx, void *arg, int jobnr, int nb_jobs)
 {
-    FracContext *frac = ctx->priv;
+    FracLDContext *fracld = ctx->priv;
     ThreadData *td = arg;
     const int slice_start = (td->in->height *  jobnr) / nb_jobs;
     const int slice_end = (td->in->height * (jobnr+1)) / nb_jobs;
@@ -1547,130 +1547,130 @@ static int slice_frac_filter(AVFilterContext *ctx, void *arg, int jobnr, int nb_
     
     for (y = slice_start; y < slice_end; y++) {
         for (x = 0; x < td->in->width; x++) {
-            frac->ffunc(td->params,td->in,x,y, td->n + frac->offset);
+            fracld->ffunc(td->params,td->in,x,y, td->n + fracld->offset);
         }
     }
     return 0;
 }
 
-static void make_params(FracContext *frac, FracFuncParams *params, int frame_number) {
+static void make_params(FracLDContext *fracld, FracLDFuncParams *params, int frame_number) {
     int k,j,i;
     const char *format = "%s %d %s %s %d";
     MYFLT np[10][100];
 
-    for(k=0;k<40;k++) params->p[k] = frac->p[k];
-    for(k=0;k<3;k++) params->cfunc[k] = frac->cfunc[k];
+    for(k=0;k<40;k++) params->p[k] = fracld->p[k];
+    for(k=0;k<3;k++) params->cfunc[k] = fracld->cfunc[k];
     for(k=0;k<3;k++) {
-        for(j=0;j<10;j++) params->cp[k][j] = frac->cp[k][j];
+        for(j=0;j<10;j++) params->cp[k][j] = fracld->cp[k][j];
     }
-    params->cmod = frac->cmod;
-    params->ifcmode = frac->ifcmode;
-    for(j=0;j<40;j++) params->ip[j] = frac->ip[j];
-    params->ifunc = frac->ifunc;
-    params->w = frac->w;
-    params->h = frac->h;
-    params->is_rgb = frac->is_rgb;
-    params->fx = frac->fx;
-    params->fy = frac->fy;
-    params->x = frac->x;
-    params->y = frac->y;
-    params->rot = frac->rot;
-    params->sat = frac->sat;
-    params->fac = frac->fac;
+    params->cmod = fracld->cmod;
+    params->ifcmode = fracld->ifcmode;
+    for(j=0;j<40;j++) params->ip[j] = fracld->ip[j];
+    params->ifunc = fracld->ifunc;
+    params->w = fracld->w;
+    params->h = fracld->h;
+    params->is_rgb = fracld->is_rgb;
+    params->fx = fracld->fx;
+    params->fy = fracld->fy;
+    params->x = fracld->x;
+    params->y = fracld->y;
+    params->rot = fracld->rot;
+    params->sat = fracld->sat;
+    params->fac = fracld->fac;
 
     for(k=0;k<10;k++) {
         for(j=0;j<100;j++) {
-            np[k][j] = frac->np[k][j];
+            np[k][j] = fracld->np[k][j];
         }
     }
 
     i=0;
     for(j=0;j<10;j++) {
-        if(frac->rf[j]) {
+        if(fracld->rf[j]) {
             char input[40];
             char target[4];
             char src[4];
             char mode[4];
             int index,m;
             MYFLT value;
-            strcpy(input, frac->rf[j]);
+            strcpy(input, fracld->rf[j]);
             sscanf(input, format, target, &index, mode, src, &m);
             switch(src[0]) {
                 case 'n': {
-                    value = frac->nfunc[m](frac->nmod[m]?frame_number%frac->nmod[m]:frame_number,np[m]);
+                    value = fracld->nfunc[m](fracld->nmod[m]?frame_number%fracld->nmod[m]:frame_number,np[m]);
                     break;
                 }                             
             }
             switch(target[0]) {
                 case 'p': {
                     if(mode[0] == 'o') params->p[index] = value;
-                    if(mode[0] == 'a') params->p[index] = frac->p[index] + value;
-                    if(mode[0] == 's') params->p[index] = frac->p[index] - value;
+                    if(mode[0] == 'a') params->p[index] = fracld->p[index] + value;
+                    if(mode[0] == 's') params->p[index] = fracld->p[index] - value;
                     break;
                 }
                 case 'n': {
                     int f = index/10;
                     int i = index % 10;
                     if(mode[0] == 'o') np[f][i] = value;
-                    if(mode[0] == 'a') np[f][i] = frac->np[f][i] + value;
-                    if(mode[0] == 's') np[f][i] = frac->np[f][i] - value;
+                    if(mode[0] == 'a') np[f][i] = fracld->np[f][i] + value;
+                    if(mode[0] == 's') np[f][i] = fracld->np[f][i] - value;
                     break;
                 }
                 case 'c': {
                     int f = index/10;
                     int i = index % 10;
                     if(mode[0] == 'o') params->cp[f][i] = value;
-                    if(mode[0] == 'a') params->cp[f][i] = frac->cp[f][i] + value;
-                    if(mode[0] == 's') params->cp[f][i] = frac->cp[f][i] - value;
+                    if(mode[0] == 'a') params->cp[f][i] = fracld->cp[f][i] + value;
+                    if(mode[0] == 's') params->cp[f][i] = fracld->cp[f][i] - value;
                     break;
                 }
                 case 'i': {
                     if(mode[0] == 'o') params->ip[index] = value;
-                    if(mode[0] == 'a') params->ip[index] = frac->ip[index] + value;
-                    if(mode[0] == 's') params->ip[index] = frac->ip[index] - value;
+                    if(mode[0] == 'a') params->ip[index] = fracld->ip[index] + value;
+                    if(mode[0] == 's') params->ip[index] = fracld->ip[index] - value;
                     break;
                 }
 
                 case 'x': {
                     if(mode[0] == 'o') params->x = value;
-                    if(mode[0] == 'a') params->x = frac->x + value;
-                    if(mode[0] == 's') params->x = frac->x - value;
+                    if(mode[0] == 'a') params->x = fracld->x + value;
+                    if(mode[0] == 's') params->x = fracld->x - value;
                     break;
                 }
                 case 'y': {
                     if(mode[0] == 'o') params->y = value;
-                    if(mode[0] == 'a') params->y = frac->y + value;
-                    if(mode[0] == 's') params->y = frac->y - value;
+                    if(mode[0] == 'a') params->y = fracld->y + value;
+                    if(mode[0] == 's') params->y = fracld->y - value;
                     break;
                 }
                 case 'w': {
                     if(mode[0] == 'o') params->fx = value;
-                    if(mode[0] == 'a') params->fx = frac->fx + value;
-                    if(mode[0] == 's') params->fx = frac->fx - value;
+                    if(mode[0] == 'a') params->fx = fracld->fx + value;
+                    if(mode[0] == 's') params->fx = fracld->fx - value;
                     break;
                 }
                 case 'h': {
                     if(mode[0] == 'o') params->fy = value;
-                    if(mode[0] == 'a') params->fy = frac->fy + value;
-                    if(mode[0] == 's') params->fy = frac->fy - value;
+                    if(mode[0] == 'a') params->fy = fracld->fy + value;
+                    if(mode[0] == 's') params->fy = fracld->fy - value;
                     break;
                 }
                 case 'r': {
                     if(mode[0] == 'o') params->rot = value;
-                    if(mode[0] == 'a') params->rot = frac->rot + value;
-                    if(mode[0] == 's') params->rot = frac->rot - value;
+                    if(mode[0] == 'a') params->rot = fracld->rot + value;
+                    if(mode[0] == 's') params->rot = fracld->rot - value;
                     break;
                 }
                 case 'f': {
                     if(mode[0] == 'o') params->fac = value;
-                    if(mode[0] == 'a') params->fac = frac->fac + value;
-                    if(mode[0] == 's') params->fac = frac->fac - value;
+                    if(mode[0] == 'a') params->fac = fracld->fac + value;
+                    if(mode[0] == 's') params->fac = fracld->fac - value;
                     break;
                 }
                 case 's': {
                     if(mode[0] == 'o') params->sat = value;
-                    if(mode[0] == 'a') params->sat = frac->sat + value;
-                    if(mode[0] == 's') params->sat = frac->sat - value;
+                    if(mode[0] == 'a') params->sat = fracld->sat + value;
+                    if(mode[0] == 's') params->sat = fracld->sat - value;
                     break;
                 }
             }
@@ -1680,7 +1680,7 @@ static void make_params(FracContext *frac, FracFuncParams *params, int frame_num
  
 }
 
-static void fdebug(FracFuncParams *params, int frame_number, AVFrame *in) {
+static void fdebug(FracLDFuncParams *params, int frame_number, AVFrame *in) {
     int k;
     for(k=0;k<4;k++) {
         av_genutil_draw_number_c(k*100+20, params->h-16, params->p[k], 0, in, 0);
@@ -1723,15 +1723,15 @@ static void fdebug(FracFuncParams *params, int frame_number, AVFrame *in) {
 }
 
 
-static int frac_filter_frame(AVFilterLink *inlink, AVFrame *in)
+static int fracld_filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     int nb_threads;
     double *p;
     double n;
-    FracFuncParams params;
+    FracLDFuncParams params;
     ThreadData td;
     AVFilterContext *ctx = inlink->dst;
-    FracContext *frac = ctx->priv;
+    FracLDContext *fracld = ctx->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
 
     srand(0);
@@ -1740,33 +1740,33 @@ static int frac_filter_frame(AVFilterLink *inlink, AVFrame *in)
     n = inlink->frame_count_out;
     p = calloc(40,sizeof(double));
     params.p = p;
-    make_params(frac,&params,n+frac->offset);
+    make_params(fracld,&params,n+fracld->offset);
     
     td.in = in;
     td.n = n;
     td.params = &params;
-    ctx->internal->execute(ctx, slice_frac_filter, &td, NULL, FFMIN(in->height, nb_threads));
-    if(frac->dbg) fdebug(&params,n,in);
+    ctx->internal->execute(ctx, slice_fracld_filter, &td, NULL, FFMIN(in->height, nb_threads));
+    if(fracld->dbg) fdebug(&params,n,in);
     free(p);
     return ff_filter_frame(outlink, in);
 }
 
-static av_cold void frac_uninit(AVFilterContext *ctx)
+static av_cold void fracld_uninit(AVFilterContext *ctx)
 {
     av_log(ctx, AV_LOG_INFO, "uninit\n");
 }
 
-static const AVFilterPad frac_inputs[] = {
+static const AVFilterPad fracld_inputs[] = {
     {
         .name         = "default",
         .type         = AVMEDIA_TYPE_VIDEO,
-        .config_props = frac_config_props,
-        .filter_frame = frac_filter_frame,
+        .config_props = fracld_config_props,
+        .filter_frame = fracld_filter_frame,
     },
     { NULL }
 };
 
-static const AVFilterPad frac_outputs[] = {
+static const AVFilterPad fracld_outputs[] = {
     {
         .name = "default",
         .type = AVMEDIA_TYPE_VIDEO,
@@ -1774,15 +1774,15 @@ static const AVFilterPad frac_outputs[] = {
     { NULL }
 };
 
-AVFilter ff_vf_frac = {
-    .name          = "frac",
+AVFilter ff_vf_fracld = {
+    .name          = "fracld",
     .description   = NULL_IF_CONFIG_SMALL("Apply generic equation to each pixel."),
-    .priv_size     = sizeof(FracContext),
-    .init          = frac_init,
-    .uninit        = frac_uninit,
-    .query_formats = frac_query_formats,
-    .inputs        = frac_inputs,
-    .outputs       = frac_outputs,
-    .priv_class    = &frac_class,
+    .priv_size     = sizeof(FracLDContext),
+    .init          = fracld_init,
+    .uninit        = fracld_uninit,
+    .query_formats = fracld_query_formats,
+    .inputs        = fracld_inputs,
+    .outputs       = fracld_outputs,
+    .priv_class    = &fracld_class,
     .flags         = AVFILTER_FLAG_SUPPORT_TIMELINE_GENERIC | AVFILTER_FLAG_SLICE_THREADS,
 };
